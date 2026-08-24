@@ -76,10 +76,10 @@
     pointer-events:none; user-select:none;
   }
   #demoLabel {
-    display:none; position:fixed; top:10px; left:50%; transform:translateX(-50%); z-index:17;
+    display:none; position:fixed; top:56px; left:50%; transform:translateX(-50%); z-index:17;
     font-family: -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
-    font-size:12px; font-weight:bold; letter-spacing:2px; color:rgba(255,255,255,0.8);
-    background:rgba(0,0,0,0.35); padding:4px 12px; border-radius:5px;
+    font-size:12px; font-weight:bold; letter-spacing:2px; color:#fff;
+    background:rgba(0,0,0,0.75); border:1px solid rgba(255,255,255,0.4); padding:4px 12px; border-radius:5px;
     pointer-events:none; user-select:none; animation:blink 1.4s infinite;
   }
   #gameover {
@@ -255,7 +255,12 @@
   }
   .actbtn:active { background:rgba(255,255,255,0.7); }
   #btnJump { width:76px; height:76px; font-size:16px; }
-  #btnTetsu { font-size:10px; }
+  #btnTetsu { font-size:10px; display:none; } /* ザ・世界使用可能になるまで非表示(JS側でtheWorldChargedに連動して切り替える) */
+  #btnTetsu.ready {
+    display:flex; background:rgba(255,230,140,0.85); border-color:rgba(200,170,60,0.9);
+    animation:tetsuReadyBlink 2.2s ease-in-out infinite;
+  }
+  @keyframes tetsuReadyBlink { 0%,100%{opacity:1;} 50%{opacity:0.45;} }
 
   #theWorldBanner {
     display:none; position:fixed; top:60px; left:50%; transform:translateX(-50%); z-index:12;
@@ -2530,6 +2535,10 @@ for (let i=0;i<MAX_HAROS;i++){
 // ？ブロック・ザ・ワールド
 let theWorldCharged = false; // ハロに接触してザ・ワールドが使用可能か
 let theWorldActive = false;  // ザ・ワールド発動中(5秒間)か
+// スマホ等のザ・世界ボタンを、使用可能になるまで非表示にし、可能になったら点滅させる(theWorldChargedが変わるたびに呼ぶ)
+function updateTetsuButtonState(){
+  btnTetsuEl.classList.toggle('ready', theWorldCharged);
+}
 let theWorldTimer = 0;
 // 発動の瞬間にドクロの頻度・速度を半減させ、以後は時間経過(currentRateStepと同じ周期)でまた通常水準まで回復していく
 let worldRateMult = 1.0;
@@ -2669,6 +2678,8 @@ const goHighscoreEl = document.getElementById('goHighscore');
 const goBestEl = document.getElementById('goBest');
 const goNameEntryEl = document.getElementById('goNameEntry');
 const goNameInputEl = document.getElementById('goNameInput');
+const btnTetsuEl = document.getElementById('btnTetsu'); // スマホ等のザ・世界ボタン(使用可能になるまで非表示、可能になったら点滅させる)
+const IS_TOUCH_DEVICE = window.matchMedia('(pointer:coarse)').matches; // スマホ等タッチ操作が主のデバイスかどうか(ボタン点滅で足りるため、使用可能トーストを省略する判定に使う)
 const rankingOverlayEl = document.getElementById('rankingOverlay');
 const rankingCornerEl = document.getElementById('rankingCorner');
 const goSubEl = document.getElementById('goSub');
@@ -3436,6 +3447,7 @@ function resetGame(){
   haros.forEach(s => { s.phase = 'idle'; s.timer = 0; s.mesh.visible = false; s.shadowMesh.visible = false; });
 
   theWorldCharged = false;
+  updateTetsuButtonState();
   theWorldActive = false;
   theWorldTimer = 0;
   worldRateMult = 1.0;
@@ -3591,6 +3603,7 @@ function pressTetsuzanko(){
   // ザ・ワールド:ハロに接触して解禁するまで発動不可(初期状態では受け付けない)。地上・ジャンプ中どちらでも発動できる
   if ((state==='normal' || state==='air') && theWorldCharged){
     theWorldCharged = false;
+    updateTetsuButtonState();
     updatePlayerAppearance();
     state = 'tetsuzanko';
     tzkTimer = 0;
@@ -5165,8 +5178,11 @@ function updateHaroSlot(s, dt){
     if (hitDist <= HARO_HIT_RADIUS){
       // 発動条件の交換:ハロへの接触はザ・ワールドを使用可能にする(フォーム2への変身ではない)
       theWorldCharged = true;
-      theWorldBannerEl.textContent = 'ザ・世界 使用可能!';
-      theWorldBannerEl.style.display = 'block';
+      updateTetsuButtonState();
+      if (!IS_TOUCH_DEVICE){ // スマホ等はボタンの点滅で使用可能を示すため、このトーストは出さない
+        theWorldBannerEl.textContent = 'ザ・世界 使用可能!';
+        theWorldBannerEl.style.display = 'block';
+      }
       playChargeSound();
       playerLife = Math.min(PLAYER_MAX_LIFE, playerLife + 1); // ハロ取得でライフ1回復
       updateLifeBar();
