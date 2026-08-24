@@ -1707,6 +1707,24 @@ function createQBlockInstance(){
 }
 for (let i=0;i<QBLOCK_TARGET_COUNT;i++) qblocks.push(createQBlockInstance());
 
+// 難易度ごとの物資ブロック配置数(第一部・第二部は少なめに絞り、第三部はプール全数=QBLOCK_TARGET_COUNTのまま)
+function qblockPlacementTarget(diff){
+  if (diff === 1) return 4;
+  if (diff === 2) return 8;
+  return qblocks.length;
+}
+// ラスボスが出現する物資ブロック取得数(第一部だけ、全数を待たずに早めに出現させる)
+function qblockBossThreshold(diff){
+  if (diff === 1) return 3;
+  return qblockTotalCount; // 第二部・第三部は従来通り「全部取得」で出現
+}
+// 「あと一つッッ！」トロフィー(qblock_9のテキストを流用)を出す取得数目(難易度によって全数に対する位置が異なる)
+function qblockLastWarningCount(diff){
+  if (diff === 1) return 4;
+  if (diff === 2) return 7;
+  return 9; // 第三部は従来通り9個目
+}
+
 function placeQBlocks(){
   const placed = [];
   let attempts = 0;
@@ -1716,8 +1734,9 @@ function placeQBlocks(){
     b.mesh.material = qblockMat;
     b.shadow.visible = false;
   }
+  const target = qblockPlacementTarget(difficulty);
   let count = 0;
-  while (count < qblocks.length && attempts < qblocks.length*50){
+  while (count < target && attempts < qblocks.length*50){
     attempts++;
     const x = (Math.random()*2-1)*curQblockAreaHalf;
     const z = (Math.random()*2-1)*curQblockAreaHalf;
@@ -2854,7 +2873,7 @@ function diffLabel(d){ return d===3 ? '第三部' : d===2 ? '第二部' : '第�
 let difficulty = 1;
 
 // ---- ステージの広さ(第一部は第二部の70%に縮小する。ブロック・キャラクター等のサイズ自体は変更しない) ----
-const WORLD_SCALE_LV1 = 0.6; // 元の70%からさらに15%程縮小(0.7×0.85≈0.6)
+const WORLD_SCALE_LV1 = 0.45; // 0.6のさらに75%(0.6×0.75=0.45)
 let worldScale = 1.0;
 // 以下は「地面の広さ」に関わる値の、現在の難易度における実効値。0で仮初期化しておき、
 // 実際の値はapplyWorldScale()が(resetGame()から)呼ばれた時点で設定される(この時点ではまだ未定義の定数を参照できないため)
@@ -4800,7 +4819,7 @@ function updateShadow(){
 // ============================================================
 // レーダー(？ブロックの位置を点で示す。検知範囲はプレイヤーから半径300m)
 // ============================================================
-const RADAR_RANGE = 400;
+const RADAR_RANGE = 600; // 400の150%
 const radarCanvas = document.getElementById('radar');
 const radarCtx = radarCanvas.getContext('2d');
 function updateRadar(){
@@ -4968,11 +4987,17 @@ function updateQBlock(dt){
     b.shadow.visible = false;
     triggerForm2();
     qblocksCollected++;
-    if (qblocksCollected <= 9) awardTrophy('qblock_'+qblocksCollected); // 1〜9個目はそれぞれ専用のカウントトロフィー(10個目は全部落とした！が兼ねる)
+    if (qblocksCollected === qblockLastWarningCount(difficulty)){
+      awardTrophy('qblock_9'); // 難易度ごとに定めた「あと一つ」のタイミングで表示する(テキストはqblock_9(あと一つ！！)を流用)
+    } else if (qblocksCollected <= 9 && qblocksCollected < qblockTotalCount){
+      awardTrophy('qblock_'+qblocksCollected); // 1〜9個目はそれぞれ専用のカウントトロフィー(全数取得時は下記の分岐が扱う)
+    }
+    if (qblocksCollected === qblockBossThreshold(difficulty)){
+      spawnBoss(); // 第一部だけ全数を待たずに早めに出現する(詳細はqblockBossThreshold参照)
+    }
     if (qblocksCollected >= qblockTotalCount){
       form2Infinite = true; // 最後の１個を取得した後はフォーム2の時間制限がなくなる
-      awardTrophy('all_blocks');
-      spawnBoss();
+      if (difficulty !== 1) awardTrophy('all_blocks'); // 第一部はボスが先に出現済みのため、全数回収時は上記の「あと一つ」表示のみとし、全部落とした！は出さない
     }
   }
 }
