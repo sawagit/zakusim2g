@@ -75,6 +75,13 @@
     background:rgba(0,0,0,0.3); padding:3px 10px; border-radius:5px;
     pointer-events:none; user-select:none;
   }
+  #digestLabel {
+    display:none; position:fixed; top:56px; left:50%; transform:translateX(-50%); z-index:17;
+    font-family: -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+    font-size:12px; font-weight:bold; letter-spacing:2px; color:#fff;
+    background:rgba(0,0,0,0.75); border:1px solid rgba(255,204,51,0.6); padding:4px 12px; border-radius:5px;
+    pointer-events:none; user-select:none;
+  }
   #demoLabel {
     display:none; position:fixed; top:56px; left:50%; transform:translateX(-50%); z-index:17;
     font-family: -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
@@ -397,6 +404,7 @@
 </div>
 <div id="pauseOverlay">⏸ PAUSE</div>
 <div id="demoLabel">DEMO PLAY - 何か操作すると戻ります</div>
+<div id="digestLabel">🎬 ハイライト再生中 - 何か操作するとスキップ</div>
 <div id="theWorldBanner"></div>
 <div id="part2TeaseBanner">本当の戦いは第二部からだ！</div>
 <div id="tutorialHint"></div>
@@ -1899,6 +1907,7 @@ function updateBoss(dt){
 
 let victoryPoseIndex = 0; // クリア演出のジョジョ立ちポーズ番号(triggerVictory()のたびに3種類からランダムに選び直す)
 function triggerVictory(){
+  triggerDigestCapture('boss_defeat'); // ハイライトダイジェスト用(詳細は「ハイライトダイジェスト」節を参照)
   // ジャンプ上昇中(vy>0)にラスボスを撃破した場合、victory中は物理更新が行われずvyが正のまま残り続け、
   // updateJumpThrusterがいつまでも「上昇中」と判定してスラスター音が鳴り続けてしまうため、ここで明示的に止める
   stopThrusterSound();
@@ -3382,6 +3391,7 @@ function startGame(diff, invincible){
 function resetGame(){
   stopBGM();
   stopThrusterSound();
+  digestResetAll();
   for (const k in keysDown) keysDown[k] = false; // デモの自動プレイ入力等が押しっぱなしのまま残ってしまうのを防ぐ(通常のキー入力もここで一旦すべて解放する)
   characterRoot.visible = true;
   pos.x = 0; pos.z = 0; yaw = 0;
@@ -3528,6 +3538,7 @@ function pressJump(){
 // 直前の水平速度・旋回角速度は一切引き継がず、その時点の方向キー入力だけを見て毎回ゼロから組み立て直す。
 // 方向キーを何も押していなければ完全に垂直方向(水平速度・旋回角速度とも0)にジャンプする
 function performMultiJump(){
+  triggerDigestCapture('first_multijump'); // ハイライトダイジェスト用
   vy = JUMP_V0;
   const spdMult = hiddenAuraTimer >= 0 ? HIDDEN_AURA_SPEED_MULT : (playerForm===2 ? FORM2_SPEED_MULT : 1);
   const baseRun = difficulty === 3 ? RUN_SPEED*2 : RUN_SPEED; // 第三部は基準速度そのものが通常の2倍。他形態係数はこれを基準に従来通り掛ける
@@ -3571,6 +3582,7 @@ function pressJojo(){
     if (s.phase === 'flying' || s.phase === 'falling'){
       const d = Math.hypot(s.x-center.x, s.y-center.y, s.z-center.z);
       if (d <= currentJojoRange()){
+        triggerDigestCapture('jojo_kill'); // ハイライトダイジェスト用(ジョジョ立ちでの撃破に限る。フォーム2の接触撃破は対象外)
         spawnExplosion(s.x, s.y, s.z);
         playExplosionSound();
         resetSkull(s);
@@ -3649,6 +3661,8 @@ window.addEventListener('keydown', (e)=>{
   if (tutorialIntroActive){ if (!e.repeat) endTutorialIntro(); return; } // チュートリアル導入メッセージ中は、何かキーを押すと即座に次へ進む
 
   if (demoActive){ if (!e.repeat) cancelDemo(); return; } // デモ中は何かキーを押したら即座にタイトルへ戻す
+
+  if (digestPlaybackActive){ if (!e.repeat) finishDigestPlayback(); return; } // ハイライトダイジェスト再生中は何かキーを押したらスキップする
 
   if (awaitingDifficulty){
     if (rankingOverlayOpen) return; // ランキング表示中はゲーム開始キーを無視する
@@ -3757,6 +3771,7 @@ const DIR8 = [
     ensureAudio();
     if (tutorialIntroActive){ endTutorialIntro(); return; } // チュートリアル導入メッセージ中は、何か操作すると即座に次へ進む
     if (demoActive){ cancelDemo(); return; }
+    if (digestPlaybackActive){ finishDigestPlayback(); return; } // ハイライトダイジェスト再生中は何か操作したらスキップする
     if (activeTouchId !== null) return; // 既に1本追跡中なら、追加の指は無視する
     const t = e.changedTouches[0];
     activeTouchId = t.identifier;
@@ -3790,6 +3805,7 @@ function wireActionButton(id, fn){
     ensureAudio();
     if (tutorialIntroActive){ endTutorialIntro(); return; } // チュートリアル導入メッセージ中は、何か操作すると即座に次へ進む
     if (demoActive){ cancelDemo(); return; }
+    if (digestPlaybackActive){ finishDigestPlayback(); return; } // ハイライトダイジェスト再生中は何か操作したらスキップする
     if (gameOver || awaitingDifficulty || paused) return;
     fn();
   }, { passive:false });
@@ -3870,6 +3886,7 @@ const pauseOverlayEl = document.getElementById('pauseOverlay');
 function togglePause(){
   if (tutorialIntroActive){ endTutorialIntro(); return; } // チュートリアル導入メッセージ中は、PAUSEボタン等での操作も次へ進める扱いにする
   if (demoActive){ cancelDemo(); return; } // デモ中はポーズせず、そのままタイトルへ戻す
+  if (digestPlaybackActive){ finishDigestPlayback(); return; } // ハイライトダイジェスト再生中はポーズせず、そのままスキップする
   if (awaitingDifficulty || gameOver) return;
   paused = !paused;
   pauseBtnEl.classList.toggle('active', paused);
@@ -4082,6 +4099,7 @@ function updateGamepadInner(dt){
   if (tutorialIntroActive){ if (anyPressed) endTutorialIntro(); return; } // チュートリアル導入メッセージ中は、何か操作すると即座に次へ進む
 
   if (demoActive){ if (anyPressed) cancelDemo(); return; }
+  if (digestPlaybackActive){ if (anyPressed) finishDigestPlayback(); return; } // ハイライトダイジェスト再生中はコントローラー操作でもスキップする
 
   if (awaitingDifficulty){
     if (rankingOverlayOpen) return;
@@ -4581,8 +4599,13 @@ function update(dt){
 
     victoryTimer += dt;
     if (victoryTimer >= VICTORY_DURATION){
-      congratsBannerEl.style.display = 'none';
-      finishGame(true);
+      // 記録できたハイライトがあればダイジェストを再生してからGAME OVER画面へ。無ければ従来通りそのまま進む
+      if (!demoActive && startDigestPlayback()){
+        congratsBannerEl.style.display = 'none';
+      } else {
+        congratsBannerEl.style.display = 'none';
+        finishGame(true);
+      }
     }
   }
 
@@ -4997,6 +5020,7 @@ function updateQBlock(dt){
     b.shadow.visible = false;
     triggerForm2();
     qblocksCollected++;
+    if (qblocksCollected === 1) triggerDigestCapture('first_block'); // ハイライトダイジェスト用
     if (qblocksCollected === qblockLastWarningCount(difficulty)){
       awardTrophy('qblock_9'); // 難易度ごとに定めた「あと一つ」のタイミングで表示する(テキストはqblock_9(あと一つ！！)を流用)
     } else if (qblocksCollected <= 9 && qblocksCollected < qblockTotalCount){
@@ -5051,6 +5075,7 @@ function currentTheWorldDuration(){
 }
 
 function activateTheWorld(){
+  triggerDigestCapture('first_world'); // ハイライトダイジェスト用
   theWorldActive = true;
   theWorldTimer = 0;
   worldRateMult = 0.5; // 発動の瞬間、ドクロの頻度・速度を半減(以後は時間経過で回復していく)
@@ -5209,6 +5234,199 @@ function updateHaro(dt){
   }
 }
 
+// ============================================================
+// ハイライトダイジェスト(クリア後に流す短い名場面クリップ)
+// ============================================================
+// 「見た目を再現できればよい」記録なので、乱数やタイムステップの再現性は問わない(状態スナップショット方式)。
+// プレイ中は常に直近DIGEST_PRE_ROLL秒ぶんのスナップショットをリングバッファでRAM上に保持し続け、
+// 対象イベントが発生した瞬間にその内容をコピーして確定用ジョブを開始、以後DIGEST_POST_ROLL秒だけ追加記録して1クリップを確定する。
+// 保存はせず、プレイ中のメモリ上だけで完結する(ページを離れれば自然に破棄される)。
+const DIGEST_PRE_ROLL = 2.0;   // イベント発生の何秒前から含めるか(調整可能)
+const DIGEST_POST_ROLL = 0.5;  // イベント発生後、何秒追加で含めるか(調整可能)
+const DIGEST_CLIP_COUNT = 3;   // 再生するクリップ数(記録できた数がこれより少ない場合はある分だけ)
+const DIGEST_ZAKU_POOL_SIZE = 6; // 再生専用の敵ザク表示枠(生ゲーム側のzakus配列とは独立させる。可変長配列のため)
+// カメラ演出: プレイヤーの斜め前(あおり気味)から正面(見下ろし気味)へ45°回り込みながらズームインする
+const DIGEST_CAM_YAW_FROM = 45*D2R, DIGEST_CAM_YAW_TO = 0;
+const DIGEST_CAM_PITCH_FROM = -8*D2R, DIGEST_CAM_PITCH_TO = 45*D2R;
+const DIGEST_CAM_DIST_FROM = 38, DIGEST_CAM_DIST_TO = 16;
+
+let digestClockNow = 0;           // 記録専用の時計(ラスボス演出中・ザ・世界中でも止めない。elapsedTimeとは別物)
+let digestRingBuffer = [];        // 直近DIGEST_PRE_ROLL秒ぶんの記録(常時更新)
+let digestPendingCaptures = [];   // 確定待ち(post-roll記録中)のキャプチャジョブ
+let digestCapturedClips = {};     // イベントID→確定済みフレーム配列
+let digestTime20Fired = false;
+
+let digestPlaybackActive = false;
+let digestClips = [];             // 今回再生する、ランダムに選ばれたクリップ(最大DIGEST_CLIP_COUNT件)
+let digestClipIndex = 0;
+let digestClipTimer = 0;
+let digestClipDuration = 0;
+const digestZakuPool = []; // 再生専用の敵ザク表示枠(常に非表示で確保しておき、再生中だけ使う)
+for (let i=0;i<DIGEST_ZAKU_POOL_SIZE;i++){
+  const m = createZakuMesh(false);
+  m.group.visible = false;
+  digestZakuPool.push(m);
+}
+const digestLabelEl = document.getElementById('digestLabel');
+
+function digestResetAll(){
+  digestClockNow = 0;
+  digestRingBuffer = [];
+  digestPendingCaptures = [];
+  digestCapturedClips = {};
+  digestTime20Fired = false;
+  digestPlaybackActive = false;
+  digestClips = [];
+  digestClipIndex = 0;
+  digestClipTimer = 0;
+  digestZakuPool.forEach(m => m.group.visible = false);
+  if (digestLabelEl) digestLabelEl.style.display = 'none';
+}
+
+function digestCaptureFrame(){
+  return {
+    t: digestClockNow,
+    px: pos.x, py: airY, pz: pos.z, yaw: yaw,
+    tiltX: cur.tiltX, tiltZ: cur.tiltZ, headYaw: cur.headYaw, hipY: cur.hipY, bodyYawOffset: cur.bodyYawOffset,
+    rLegHip: cur.rLegHip, rLegKnee: cur.rLegKnee, rLegSpread: cur.rLegSpread,
+    lLegHip: cur.lLegHip, lLegKnee: cur.lLegKnee, lLegSpread: cur.lLegSpread,
+    rArmHip: cur.rArmHip, rArmElbow: cur.rArmElbow, rArmSpread: cur.rArmSpread,
+    lArmHip: cur.lArmHip, lArmElbow: cur.lArmElbow, lArmSpread: cur.lArmSpread,
+    charVisible: characterRoot.visible,
+    // ドクロ・ハロは固定枠のプールなので、枠の対応を保つためnullで穴埋めして記録する
+    skulls: skulls.map(s => s.group.visible ? { x:s.x, y:s.y, z:s.z, rotY:s.group.rotation.y } : null),
+    haros: haros.map(h => h.mesh.visible ? { x:h.x, y:h.y, z:h.z } : null),
+    // 敵ザクは可変長配列のため、枠は無視して見えているものだけ並べて記録する(再生時は専用プールに詰め直す)
+    zakus: zakus.filter(z => z.mesh.group.visible).slice(0, DIGEST_ZAKU_POOL_SIZE).map(z => ({ x:z.x, y:z.y, z:z.z, rotY:z.mesh.group.rotation.y })),
+    boss: bossActive ? { x:bossX, y:currentBossY(), z:bossZ, rotY:bossMesh.rotation.y } : null
+  };
+}
+
+// プレイ中は常時これを呼び、リングバッファと確定待ちジョブを進める(デモプレイ・再生中は呼ばない)
+function digestRecordFrame(dt){
+  digestClockNow += dt;
+  const frame = digestCaptureFrame();
+  digestRingBuffer.push(frame);
+  while (digestRingBuffer.length && digestRingBuffer[0].t < digestClockNow - DIGEST_PRE_ROLL) digestRingBuffer.shift();
+
+  for (let i=digestPendingCaptures.length-1;i>=0;i--){
+    const job = digestPendingCaptures[i];
+    job.frames.push(frame);
+    job.postRollAccum += dt;
+    if (job.postRollAccum >= DIGEST_POST_ROLL){
+      digestCapturedClips[job.eventId] = job.frames;
+      digestPendingCaptures.splice(i,1);
+    }
+  }
+}
+
+// 6種類の対象イベント発生時にそれぞれこれを呼ぶ(1プレイにつき1回だけ確定させる。2回目以降は無視する)
+function triggerDigestCapture(eventId){
+  if (digestCapturedClips[eventId]) return;
+  if (digestPendingCaptures.some(j => j.eventId === eventId)) return;
+  digestPendingCaptures.push({ eventId, postRollAccum:0, frames: digestRingBuffer.slice() });
+}
+
+// 記録できたクリップからランダムにDIGEST_CLIP_COUNT件選び、再生を開始する。1件も無ければfalseを返す(呼び出し側で通常のGAME OVERへ進む)
+function startDigestPlayback(){
+  const ids = Object.keys(digestCapturedClips);
+  if (!ids.length) return false;
+  for (let i=ids.length-1;i>0;i--){ const j = Math.floor(Math.random()*(i+1)); [ids[i],ids[j]] = [ids[j],ids[i]]; }
+  digestClips = ids.slice(0, DIGEST_CLIP_COUNT).map(id => digestCapturedClips[id]);
+  digestClipIndex = 0;
+  digestClipTimer = 0;
+  digestClipDuration = digestClipDurationOf(digestClips[0]);
+  digestPlaybackActive = true;
+  if (digestLabelEl) digestLabelEl.style.display = 'block';
+  return true;
+}
+function digestClipDurationOf(clip){
+  return Math.max(0.001, clip[clip.length-1].t - clip[0].t);
+}
+
+function applyDigestFrame(frame){
+  pos.x = frame.px; airY = frame.py; pos.z = frame.pz; yaw = frame.yaw;
+  cur.tiltX=frame.tiltX; cur.tiltZ=frame.tiltZ; cur.headYaw=frame.headYaw; cur.hipY=frame.hipY; cur.bodyYawOffset=frame.bodyYawOffset;
+  cur.rLegHip=frame.rLegHip; cur.rLegKnee=frame.rLegKnee; cur.rLegSpread=frame.rLegSpread;
+  cur.lLegHip=frame.lLegHip; cur.lLegKnee=frame.lLegKnee; cur.lLegSpread=frame.lLegSpread;
+  cur.rArmHip=frame.rArmHip; cur.rArmElbow=frame.rArmElbow; cur.rArmSpread=frame.rArmSpread;
+  cur.lArmHip=frame.lArmHip; cur.lArmElbow=frame.lArmElbow; cur.lArmSpread=frame.lArmSpread;
+  characterRoot.visible = frame.charVisible;
+  applyPose();
+  updateShadow();
+
+  skulls.forEach((s,i) => {
+    const d = frame.skulls[i];
+    s.group.visible = !!d;
+    if (d){ s.group.position.set(d.x,d.y,d.z); s.group.rotation.y = d.rotY; }
+  });
+  haros.forEach((h,i) => {
+    const d = frame.haros[i];
+    h.mesh.visible = !!d;
+    if (d) h.mesh.position.set(d.x,d.y,d.z);
+  });
+  digestZakuPool.forEach((m,i) => {
+    const d = frame.zakus[i];
+    m.group.visible = !!d;
+    if (d){ m.group.position.set(d.x,d.y,d.z); m.group.rotation.y = d.rotY; }
+  });
+  bossMesh.visible = !!frame.boss;
+  bossShadowMesh.visible = !!frame.boss;
+  if (frame.boss){
+    bossMesh.position.set(frame.boss.x, frame.boss.y, frame.boss.z);
+    bossMesh.rotation.y = frame.boss.rotY;
+    bossShadowMesh.position.set(frame.boss.x, 0.03, frame.boss.z);
+  }
+}
+
+// クリップ内の経過時間に最も近い記録フレームを探す(クリップは高々3秒程度なので素朴な線形探索で十分)
+function findDigestFrame(clip, localT){
+  let frame = clip[clip.length-1];
+  for (let i=0;i<clip.length;i++){
+    if (clip[i].t - clip[0].t >= localT){ frame = clip[i]; break; }
+  }
+  return frame;
+}
+
+function updateDigestPlayback(dt){
+  const clip = digestClips[digestClipIndex];
+  if (!clip){ finishDigestPlayback(); return; }
+  digestClipTimer += dt;
+  const frame = findDigestFrame(clip, digestClipTimer);
+  applyDigestFrame(frame);
+  updateDigestCamera(clamp(digestClipTimer/digestClipDuration, 0, 1), frame);
+
+  if (digestClipTimer >= digestClipDuration){
+    digestClipIndex++;
+    digestClipTimer = 0;
+    if (digestClipIndex < digestClips.length){
+      digestClipDuration = digestClipDurationOf(digestClips[digestClipIndex]);
+    } else {
+      finishDigestPlayback();
+    }
+  }
+}
+
+// プレイヤーを中心に、斜め前(あおり)→正面(見下ろし)へ45°回り込みながらズームインする決め打ちのカメラワーク
+function updateDigestCamera(f, frame){
+  const camYaw = frame.yaw + DIGEST_CAM_YAW_FROM + (DIGEST_CAM_YAW_TO-DIGEST_CAM_YAW_FROM)*f;
+  const camPitch = DIGEST_CAM_PITCH_FROM + (DIGEST_CAM_PITCH_TO-DIGEST_CAM_PITCH_FROM)*f;
+  const camDist = DIGEST_CAM_DIST_FROM + (DIGEST_CAM_DIST_TO-DIGEST_CAM_DIST_FROM)*f;
+  const tx = frame.px, ty = 9 + frame.py, tz = frame.pz;
+  camera.position.x = tx + camDist*Math.cos(camPitch)*Math.sin(camYaw);
+  camera.position.y = ty + camDist*Math.sin(camPitch);
+  camera.position.z = tz + camDist*Math.cos(camPitch)*Math.cos(camYaw);
+  camera.lookAt(tx, ty, tz);
+}
+
+function finishDigestPlayback(){
+  digestPlaybackActive = false;
+  if (digestLabelEl) digestLabelEl.style.display = 'none';
+  digestZakuPool.forEach(m => m.group.visible = false);
+  congratsBannerEl.style.display = 'none';
+  finishGame(true);
+}
+
 function loop(now){
   requestAnimationFrame(loop);
   const dt = clamp((now-lastTime)/1000, 0, 0.05);
@@ -5222,7 +5440,9 @@ function loop(now){
     if (titleIdleTimer >= TITLE_DEMO_IDLE) startDemo();
   }
   updatePart2TeaseBanner(dt);
-  if (!gameOver && !awaitingDifficulty && !paused){
+  if (digestPlaybackActive){
+    updateDigestPlayback(dt);
+  } else if (!gameOver && !awaitingDifficulty && !paused){
     if (demoActive) updateDemoAI(dt);
     update(dt);
     updateJumpThruster(dt); // applyPose()後の最新姿勢で足・バックパックの位置を取得するため、update(dt)の直後に呼ぶ
@@ -5231,6 +5451,7 @@ function loop(now){
     if (elapsedTime >= 100) awardTrophy('time_100');
     if (elapsedTime >= 200) awardTrophy('time_200');
     if (elapsedTime >= 300) awardTrophy('time_300');
+    if (!digestTime20Fired && elapsedTime >= 20){ digestTime20Fired = true; triggerDigestCapture('time_20s'); } // ハイライトダイジェスト用
     updateEnemy(dt);
     updateZakus(dt);
     updateDamageInvincibility(dt);
@@ -5244,6 +5465,7 @@ function loop(now){
     updateTheWorld(dt);
     updateBoss(dt);
     updateRadar();
+    if (!demoActive) digestRecordFrame(dt); // ハイライトダイジェスト用のリングバッファ記録(デモプレイでは記録しない)
   }
   if (gameOver){
     gameOverTimer += dt;
@@ -5266,7 +5488,8 @@ function loop(now){
     distanceEl.textContent = '走破距離: ' + distanceTraveled.toFixed(1) + 'm';
   }
   // 一時停止中もカメラの視点操作(ドラッグ・ズーム)だけは反映する(難易度選択・GAME OVER画面では従来どおり更新しない)
-  if (!gameOver && !awaitingDifficulty) updateCamera(dt);
+  // ダイジェスト再生中はupdateDigestPlayback内で専用のカメラワークを適用済みのため、ここでは呼ばない
+  if (!digestPlaybackActive && !gameOver && !awaitingDifficulty) updateCamera(dt);
 
   renderer.render(scene, camera);
 }
