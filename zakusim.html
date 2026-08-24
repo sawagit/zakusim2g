@@ -2895,6 +2895,7 @@ let difficulty = 1;
 
 // ---- ステージの広さ(第一部は第二部の70%に縮小する。ブロック・キャラクター等のサイズ自体は変更しない) ----
 const WORLD_SCALE_LV1 = 0.45; // 0.6のさらに75%(0.6×0.75=0.45)
+const QBLOCK_EDGE_MARGIN_LV1 = 100; // 第一部限定: 初心者の落下ミスを減らすため、物資ブロックはステージ端からこの距離(m)以上内側にのみ配置する
 let worldScale = 1.0;
 // 以下は「地面の広さ」に関わる値の、現在の難易度における実効値。0で仮初期化しておき、
 // 実際の値はapplyWorldScale()が(resetGame()から)呼ばれた時点で設定される(この時点ではまだ未定義の定数を参照できないため)
@@ -2911,6 +2912,8 @@ function applyWorldScale(diff){
   curGroundHalf = GROUND_HALF*worldScale;
   curSlitDist = SLIT_DIST*worldScale; curSlitWidth = SLIT_WIDTH*worldScale; curSlitSpan = SLIT_SPAN*worldScale;
   curQblockAreaHalf = QBLOCK_AREA_HALF*worldScale; curQblockDensityRadius = QBLOCK_DENSITY_RADIUS*worldScale; curQblockMinFromOrigin = QBLOCK_MIN_FROM_ORIGIN*worldScale;
+  // 第一部は初心者の落下ミスを減らすため、ステージ端からQBLOCK_EDGE_MARGIN_LV1m以上内側にしか配置しない(他の難易度は従来通り)
+  if (diff === 1) curQblockAreaHalf = Math.min(curQblockAreaHalf, curGroundHalf - QBLOCK_EDGE_MARGIN_LV1);
   curBossOrbitRadius = BOSS_ORBIT_RADIUS*worldScale; curBossAngularSpeed = BOSS_SPEED/curBossOrbitRadius;
   curRadarRange = RADAR_RANGE*worldScale;
   curSkullSpawnRadius = SKULL_SPAWN_RADIUS*worldScale; curSkullSpawnRadiusSecond = SKULL_SPAWN_RADIUS_SECOND*worldScale;
@@ -3543,7 +3546,6 @@ function pressJump(){
 // 直前の水平速度・旋回角速度は一切引き継がず、その時点の方向キー入力だけを見て毎回ゼロから組み立て直す。
 // 方向キーを何も押していなければ完全に垂直方向(水平速度・旋回角速度とも0)にジャンプする
 function performMultiJump(){
-  triggerDigestCapture('first_multijump'); // ハイライトダイジェスト用
   vy = JUMP_V0;
   const spdMult = hiddenAuraTimer >= 0 ? HIDDEN_AURA_SPEED_MULT : (playerForm===2 ? FORM2_SPEED_MULT : 1);
   const baseRun = difficulty === 3 ? RUN_SPEED*2 : RUN_SPEED; // 第三部は基準速度そのものが通常の2倍。他形態係数はこれを基準に従来通り掛ける
@@ -4363,8 +4365,10 @@ function updateAirPhysics(dt){
     jojoAirWasFrozen = true;
   } else {
     if (jojoAirWasFrozen){ vy = 0; jojoAirWasFrozen = false; }
+    const wasRising = vy > 0;
     vy -= JUMP_GRAVITY*dt;
     airY += vy*dt;
+    if (wasRising && vy <= 0) triggerDigestCaptureBest('jump_apex', airY); // ハイライトダイジェスト用: ジャンプ・再ジャンプで一番高く跳んだ瞬間を記録する
   }
   yaw += airTakeoffYawRate*dt;
   pos.x += airTakeoffSpeed * (-Math.sin(yaw)) * dt;
@@ -5090,7 +5094,6 @@ function currentTheWorldDuration(){
 }
 
 function activateTheWorld(){
-  triggerDigestCapture('first_world'); // ハイライトダイジェスト用
   theWorldActive = true;
   theWorldTimer = 0;
   worldRateMult = 0.5; // 発動の瞬間、ドクロの頻度・速度を半減(以後は時間経過で回復していく)
@@ -5118,6 +5121,12 @@ function updateTheWorld(dt){
   const duration = currentTheWorldDuration();
   const remain = Math.max(1, Math.ceil(duration - theWorldTimer));
   theWorldCountdownEl.textContent = '残り' + remain + '秒!';
+  // ハイライトダイジェスト用: 最も多くの敵(ドクロ・敵ザク・ハロ・ラスボス)を同時に停止させている瞬間を記録する
+  const frozenCount = skulls.filter(s => s.group.visible).length
+    + zakus.filter(z => z.mesh.group.visible).length
+    + haros.filter(h => h.mesh.visible).length
+    + (bossActive ? 1 : 0);
+  triggerDigestCaptureBest('world_freeze_peak', frozenCount);
   if (theWorldTimer >= duration){
     deactivateTheWorld();
   }
@@ -5262,7 +5271,7 @@ const DIGEST_CLIP_COUNT = 3;   // 再生するクリップ数(記録できた数
 // 検証用: 無敵モードで開始したプレイに限り、前後5秒ずつ・記録できた全クリップを再生する(狙った瞬間が撮れているか確認しやすくするため)
 const DIGEST_DEBUG_PRE_ROLL = 5.0;
 const DIGEST_DEBUG_POST_ROLL = 5.0;
-const DIGEST_EVENT_ORDER = ['first_block','first_multijump','first_world','jojo_kill','time_20s','boss_defeat']; // 検証再生時の表示順(だいたい発生が早い順)
+const DIGEST_EVENT_ORDER = ['first_block','jump_apex','world_freeze_peak','jojo_kill','time_20s','boss_defeat']; // 検証再生時の表示順(だいたい発生が早い順)
 function digestPreRollSec(){ return invincibleMode ? DIGEST_DEBUG_PRE_ROLL : DIGEST_PRE_ROLL; }
 function digestPostRollSec(){ return invincibleMode ? DIGEST_DEBUG_POST_ROLL : DIGEST_POST_ROLL; }
 const DIGEST_ZAKU_POOL_SIZE = 6; // 再生専用の敵ザク表示枠(生ゲーム側のzakus配列とは独立させる。可変長配列のため)
@@ -5280,6 +5289,7 @@ let digestRingBuffer = [];        // 直近DIGEST_PRE_ROLL秒ぶんの記録(常
 let digestEffectRingBuffer = [];  // 直近の効果イベント(ジョジョドーム・爆発)の記録。フレームと同じ考え方でリングバッファにする
 let digestPendingCaptures = [];   // 確定待ち(post-roll記録中)のキャプチャジョブ
 let digestCapturedClips = {};     // イベントID→{ eventId, frames, effects }
+let digestBestScore = {};         // イベントID→ここまでの最高スコア(「一番◯◯だった瞬間」系のイベント専用)
 let digestTime20Fired = false;
 
 let digestPlaybackActive = false;
@@ -5305,6 +5315,7 @@ function digestResetAll(){
   digestEffectRingBuffer = [];
   digestPendingCaptures = [];
   digestCapturedClips = {};
+  digestBestScore = {};
   digestTime20Fired = false;
   digestPlaybackActive = false;
   digestClips = [];
@@ -5325,6 +5336,7 @@ function digestCaptureFrame(){
     lArmHip: cur.lArmHip, lArmElbow: cur.lArmElbow, lArmSpread: cur.lArmSpread,
     charVisible: characterRoot.visible,
     worldActive: theWorldActive, // ザ・世界中のネガポジ反転を再生時にも再現するため
+    state: state, inAir: inAir, currentSpeed: currentSpeed, // 第三部の地上バーニア(updateHoverThrust)の条件判定に必要
     // ドクロ・ハロは固定枠のプールなので、枠の対応を保つためnullで穴埋めして記録する
     skulls: skulls.map(s => s.group.visible ? { x:s.x, y:s.y, z:s.z, rotY:s.group.rotation.y } : null),
     haros: haros.map(h => h.mesh.visible ? { x:h.x, y:h.y, z:h.z } : null),
@@ -5368,13 +5380,23 @@ function triggerDigestCapture(eventId){
   digestPendingCaptures.push({ eventId, postRollAccum:0, frames: digestRingBuffer.slice(), effects: digestEffectRingBuffer.slice() });
 }
 
+// 「一番◯◯だった瞬間」系のイベント用。スコアが過去最高を更新したときだけ、その瞬間を中心にキャプチャし直す
+// (既に確定済み・確定待ちのクリップがあっても、より良い瞬間が来ればそちらに置き換える)
+function triggerDigestCaptureBest(eventId, score){
+  if (digestBestScore[eventId] !== undefined && score <= digestBestScore[eventId]) return;
+  digestBestScore[eventId] = score;
+  const pendingIdx = digestPendingCaptures.findIndex(j => j.eventId === eventId);
+  if (pendingIdx !== -1) digestPendingCaptures.splice(pendingIdx, 1);
+  digestPendingCaptures.push({ eventId, postRollAccum:0, frames: digestRingBuffer.slice(), effects: digestEffectRingBuffer.slice() });
+}
+
 // クリップごとのカメラ演出パラメータを決める。ズーム方向はクリップが切り替わるたびに交互になる。
 // あおり(下から見上げる)角は地面に埋まりやすいので、地面に埋まりにくい状況(イン→アウト、またはジャンプ中のクリップ)でだけ大きく見せ、
 // それ以外(アウト→イン、かつジャンプ以外)は控えめな角度にする
 function digestCamParamsFor(eventId){
   const zoomInToOut = (digestZoomToggle % 2 === 1); // true = 近→遠(イン→アウト)
   digestZoomToggle++;
-  const isJump = (eventId === 'first_multijump');
+  const isJump = (eventId === 'jump_apex');
   const useDramaticPitch = zoomInToOut || isJump;
   return {
     yawFrom: DIGEST_CAM_YAW_FROM, yawTo: DIGEST_CAM_YAW_TO,
@@ -5426,6 +5448,8 @@ function applyDigestFrame(frame, dt){
   applyPose();
   updateShadow();
   invertWorldColors(frame.worldActive); // ザ・世界中のネガポジ反転を再現する
+  state = frame.state; inAir = frame.inAir; currentSpeed = frame.currentSpeed;
+  updateHoverThrust(dt); // 第三部限定の地上バーニア(条件判定に上記のstate/inAir/currentSpeedを使う)
 
   skulls.forEach((s,i) => {
     const d = frame.skulls[i];
