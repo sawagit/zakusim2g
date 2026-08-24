@@ -466,11 +466,26 @@
         <div id="rankingListLv3"></div>
       </div>
     </div>
+    <div class="rankingTitle" style="margin-top:18px;">🌍 世界ランキング</div>
+    <div class="rankingCols">
+      <div class="rankingCol">
+        <div class="rankingColTitle">第一部</div>
+        <div id="worldRankingListLv1" class="rankingEmpty">読み込み中…</div>
+      </div>
+      <div class="rankingCol">
+        <div class="rankingColTitle">第二部</div>
+        <div id="worldRankingListLv2" class="rankingEmpty">読み込み中…</div>
+      </div>
+      <div class="rankingCol" id="worldRankingColLv3" style="display:none;">
+        <div class="rankingColTitle">第三部</div>
+        <div id="worldRankingListLv3" class="rankingEmpty">読み込み中…</div>
+      </div>
+    </div>
     <div class="rankingTrophies">
       <div class="rankingColTitle">獲得済みトロフィー(<span id="trophyOwnedCount">0</span>/21)</div>
       <div id="trophyOwnedList"></div>
     </div>
-    <div class="rankingNote">※この端末のブラウザに保存されたローカル記録です。他のプレイヤーの記録とは共有されません。</div>
+    <div class="rankingNote">※上段はこの端末のブラウザだけに保存されたローカル記録です。世界ランキングはラスボスを撃破してニックネームを登録すると、そのタイムと名前が全プレイヤーに公開される形で送信されます。</div>
     <button type="button" id="rankingCloseBtn">閉じる</button>
   </div>
 </div>
@@ -2689,6 +2704,32 @@ function saveLastName(name){
 function escapeHtml(s){
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
+
+// ---- 世界ランキング(Googleスプレッドシート + Apps Scriptで運用。任意の外部通信のため、失敗しても無視してよい) ----
+const WORLD_RANKING_URL = 'https://script.google.com/macros/s/AKfycbyk4gUJRWlYy9NevQ0YvPB8dXLvGXSUEh5oZclHeW4sjdSN5UrTk4hXyeTyVlj_Iv_NPg/exec';
+const WORLD_RANKING_LIST_EL = { 1: 'worldRankingListLv1', 2: 'worldRankingListLv2', 3: 'worldRankingListLv3' };
+
+function buildWorldRankingRowsHTML(entries){
+  if (!entries || !entries.length) return '<div class="rankingEmpty">記録なし</div>';
+  return entries.map((e,i) => '<div class="rankingRow"><span class="rankingRank">'+(i+1)+'</span><span class="rankingName">'+escapeHtml(e.name||'???')+'</span><span class="rankingTime">'+Number(e.time).toFixed(1)+'s</span></div>').join('');
+}
+// ランキングオーバーレイを開くたびに、表示中の各難易度ぶんだけ取得しにいく(通信中は「読み込み中…」のまま)
+function fetchWorldRanking(diff){
+  const el = document.getElementById(WORLD_RANKING_LIST_EL[diff]);
+  if (!el) return;
+  el.textContent = '読み込み中…';
+  fetch(WORLD_RANKING_URL + '?part=' + encodeURIComponent(diffLabel(diff)))
+    .then(res => res.json())
+    .then(data => { el.innerHTML = buildWorldRankingRowsHTML(data.ranking); })
+    .catch(() => { el.textContent = '取得できませんでした'; });
+}
+// ラスボス撃破+ローカルランキング入りが確定したタイムのみ、世界ランキングにも送信する(通信できなくてもゲーム進行には影響させない)
+function submitWorldRanking(diff, time, name){
+  fetch(WORLD_RANKING_URL, {
+    method: 'POST',
+    body: JSON.stringify({ part: diffLabel(diff), time, name })
+  }).catch(() => {});
+}
 function buildRankingColumnHTML(diff, limit){
   const r = rankings[diff].slice(0, limit || RANKING_MAX);
   if (!r.length) return '<div class="rankingEmpty">記録なし</div>';
@@ -2706,6 +2747,10 @@ function openRankingOverlay(){
   if (part3Unlocked) document.getElementById('rankingListLv3').innerHTML = buildRankingColumnHTML(3);
   document.getElementById('trophyOwnedList').innerHTML = buildOwnedTrophiesHTML();
   document.getElementById('trophyOwnedCount').textContent = ownedTrophies.size;
+  document.getElementById('worldRankingColLv3').style.display = part3Unlocked ? 'block' : 'none';
+  fetchWorldRanking(1);
+  fetchWorldRanking(2);
+  if (part3Unlocked) fetchWorldRanking(3);
   rankingOverlayOpen = true;
   rankingOverlayEl.style.display = 'flex';
 }
@@ -4585,6 +4630,7 @@ function confirmRankingName(){
   if (!name) name = 'NONAME';
   saveLastName(name);
   insertRanking(pendingRankingDiff, pendingRankingTime, name);
+  submitWorldRanking(pendingRankingDiff, pendingRankingTime, name);
   const diff = pendingRankingDiff;
   awaitingNameEntry = false;
   pendingRankingDiff = null;
