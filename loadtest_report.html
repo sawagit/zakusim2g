@@ -1,0 +1,278 @@
+<title>ブラウザ負荷検証レポート</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --ink:#161c22;
+  --ink-soft:#565f68;
+  --paper:#f6f7f5;
+  --panel:#ffffff;
+  --panel-2:#eef1ee;
+  --line:#d7dcd6;
+  --accent:#1c6e8c;
+  --good:#2f7d4f;
+  --good-bg:#e8f3ec;
+  --notable:#a15b12;
+  --notable-bg:#faeee0;
+  --minor:#6b6420;
+  --minor-bg:#f5f2df;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ink:#e8ecef;
+    --ink-soft:#9aa4ab;
+    --paper:#10151a;
+    --panel:#161d23;
+    --panel-2:#1b232a;
+    --line:#2b343b;
+    --accent:#5fb8dd;
+    --good:#6fd497;
+    --good-bg:#132420;
+    --notable:#e2a15e;
+    --notable-bg:#2a1f12;
+    --minor:#d8cf7a;
+    --minor-bg:#242012;
+  }
+}
+:root[data-theme="dark"]{
+  --ink:#e8ecef;
+  --ink-soft:#9aa4ab;
+  --paper:#10151a;
+  --panel:#161d23;
+  --panel-2:#1b232a;
+  --line:#2b343b;
+  --accent:#5fb8dd;
+  --good:#6fd497;
+  --good-bg:#132420;
+  --notable:#e2a15e;
+  --notable-bg:#2a1f12;
+  --minor:#d8cf7a;
+  --minor-bg:#242012;
+}
+
+*{ box-sizing:border-box; }
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:"IBM Plex Sans JP", "Segoe UI", sans-serif;
+  line-height:1.7;
+}
+.mono{ font-family:"IBM Plex Mono", ui-monospace, monospace; font-variant-numeric:tabular-nums; }
+
+header{
+  padding:clamp(28px,5vw,52px) clamp(20px,6vw,64px) clamp(24px,4vw,36px);
+  border-bottom:1px solid var(--line);
+}
+.hdr-inner{ max-width:980px; margin:0 auto; }
+.eyebrow{
+  font-family:"IBM Plex Mono",monospace; font-size:0.78rem; letter-spacing:0.08em;
+  color:var(--accent); text-transform:uppercase; margin-bottom:0.6em;
+}
+h1{
+  font-size:clamp(1.7rem,4vw,2.5rem); font-weight:700; letter-spacing:-0.01em;
+  margin:0 0 0.35em; text-wrap:balance;
+}
+.subtitle{ color:var(--ink-soft); font-size:1.02rem; max-width:62ch; margin:0; }
+.meta-row{
+  display:flex; flex-wrap:wrap; gap:1.6em; margin-top:1.4em;
+  font-family:"IBM Plex Mono",monospace; font-size:0.82rem; color:var(--ink-soft);
+}
+.meta-row b{ color:var(--ink); font-weight:600; }
+
+main{ max-width:980px; margin:0 auto; padding:clamp(28px,5vw,48px) clamp(20px,6vw,64px) clamp(48px,6vw,72px); }
+
+/* ---- サマリーパネル ---- */
+.summary{
+  display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--line);
+  border:1px solid var(--line); margin-bottom:clamp(32px,5vw,48px);
+}
+@media (max-width:680px){ .summary{ grid-template-columns:repeat(2,1fr); } }
+.summary .cell{ background:var(--panel); padding:1.3em 1.4em; }
+.summary .cell .num{ font-family:"IBM Plex Mono",monospace; font-size:2rem; font-weight:600; line-height:1; }
+.summary .cell .lbl{ font-size:0.82rem; color:var(--ink-soft); margin-top:0.5em; }
+.summary .cell.good .num{ color:var(--good); }
+.summary .cell.notable .num{ color:var(--notable); }
+.summary .cell.minor .num{ color:var(--minor); }
+
+section{ margin-bottom:clamp(36px,6vw,56px); }
+h2{
+  font-size:clamp(1.25rem,2.6vw,1.5rem); font-weight:700; margin:0 0 0.9em;
+  padding-bottom:0.5em; border-bottom:2px solid var(--ink);
+  display:flex; align-items:baseline; gap:0.5em;
+}
+h2 .idx{ font-family:"IBM Plex Mono",monospace; font-weight:400; color:var(--accent); font-size:0.7em; }
+p{ margin:0.8em 0; max-width:70ch; color:var(--ink); }
+p.lead{ color:var(--ink-soft); }
+
+/* ---- 所見テーブル ---- */
+.table-wrap{ overflow-x:auto; border:1px solid var(--line); }
+table{ width:100%; border-collapse:collapse; min-width:720px; background:var(--panel); }
+th, td{ text-align:left; padding:0.85em 1em; border-bottom:1px solid var(--line); vertical-align:top; font-size:0.94rem; }
+thead th{
+  font-family:"IBM Plex Mono",monospace; font-size:0.72rem; letter-spacing:0.06em; text-transform:uppercase;
+  color:var(--ink-soft); background:var(--panel-2); font-weight:600;
+}
+tbody tr:last-child td{ border-bottom:none; }
+td.ref{ font-family:"IBM Plex Mono",monospace; font-size:0.82rem; color:var(--ink-soft); white-space:nowrap; }
+
+.chip{
+  display:inline-block; font-family:"IBM Plex Mono",monospace; font-size:0.72rem; font-weight:600;
+  padding:0.2em 0.6em; letter-spacing:0.02em; white-space:nowrap;
+}
+.chip.good{ background:var(--good-bg); color:var(--good); }
+.chip.notable{ background:var(--notable-bg); color:var(--notable); }
+.chip.minor{ background:var(--minor-bg); color:var(--minor); }
+.chip.resolved{ background:var(--accent); color:#04151c; }
+
+/* ---- 詳細カード ---- */
+.finding{
+  border:1px solid var(--line); background:var(--panel); margin:1.2em 0; padding:1.3em 1.5em;
+  border-left:4px solid var(--line);
+}
+.finding.notable{ border-left-color:var(--notable); }
+.finding.good{ border-left-color:var(--good); }
+.finding.minor{ border-left-color:var(--minor); }
+.finding.resolved{ border-left-color:var(--accent); }
+.finding .fbody p.done{ color:var(--accent); font-weight:600; }
+.finding .fh{ display:flex; align-items:center; gap:0.8em; flex-wrap:wrap; margin-bottom:0.5em; }
+.finding .fh .ft{ font-weight:600; font-size:1.02rem; }
+.finding .fbody p{ font-size:0.95rem; margin:0.6em 0; max-width:66ch; }
+.finding .fbody p.fix{ color:var(--ink-soft); }
+.finding .fbody p.fix b{ color:var(--ink); }
+code{
+  font-family:"IBM Plex Mono",monospace; font-size:0.88em; background:var(--panel-2);
+  padding:0.1em 0.35em; border:1px solid var(--line);
+}
+
+.caveat{
+  background:var(--panel-2); border:1px solid var(--line); padding:1.2em 1.4em; margin:1.4em 0;
+}
+.caveat .head{ font-family:"IBM Plex Mono",monospace; font-size:0.78rem; letter-spacing:0.05em; color:var(--ink-soft); margin-bottom:0.5em; text-transform:uppercase; }
+.caveat p{ font-size:0.92rem; color:var(--ink-soft); margin:0.4em 0; max-width:68ch; }
+
+.reco-list{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:0.9em; }
+.reco-list li{
+  display:grid; grid-template-columns:28px 1fr; gap:0.9em; align-items:start;
+  border:1px solid var(--line); background:var(--panel); padding:1em 1.2em;
+}
+.reco-list .n{ font-family:"IBM Plex Mono",monospace; font-weight:700; color:var(--accent); }
+.reco-list .t{ font-weight:600; margin-bottom:0.2em; }
+.reco-list .d{ font-size:0.92rem; color:var(--ink-soft); }
+
+footer{
+  border-top:1px solid var(--line); padding:1.6em clamp(20px,6vw,64px) 2.4em;
+  font-family:"IBM Plex Mono",monospace; font-size:0.78rem; color:var(--ink-soft);
+}
+</style>
+
+<header>
+  <div class="hdr-inner">
+    <div class="eyebrow">Performance &amp; Memory Audit</div>
+    <h1>ZAKUMIRO2 ブラウザ負荷検証レポート</h1>
+    <p class="subtitle"><code>zakusim.html</code> のソースコードを静的に精査し、レンダリング・パーティクル・メモリ・オーディオの各観点で負荷要因を洗い出した。実機のDevToolsプロファイラによる計測値ではなく、コードから読み取れる構造的な所見であることに留意されたい(詳細は「検証手法について」を参照)。</p>
+    <div class="meta-row">
+      <div>対象: <b>zakusim.html</b> (three.js r128 / 単一HTML)</div>
+      <div>手法: <b>静的コードレビュー</b></div>
+      <div>所見数: <b>9件</b>(対応済み 2 / 軽微 2 / 良好 5)</div>
+    </div>
+    <div class="meta-row" style="margin-top:0.6em;">
+      <div style="color:var(--accent);">✓ 「要注意」判定だった2件は追補対応済み(下記§2・§3を参照)</div>
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <div class="summary">
+    <div class="cell" style="border-left:3px solid var(--accent);"><div class="num mono" style="color:var(--accent);">2</div><div class="lbl">対応済み</div></div>
+    <div class="cell minor"><div class="num">2</div><div class="lbl">軽微</div></div>
+    <div class="cell good"><div class="num">5</div><div class="lbl">良好(問題なし)</div></div>
+    <div class="cell"><div class="num mono">Low</div><div class="lbl">総合負荷評価</div></div>
+  </div>
+
+  <section>
+    <h2><span class="idx">§1</span>総評</h2>
+    <p>全体として、本作の描画・メモリ管理は<b>Three.jsを使った単一HTMLゲームとしては軽量な部類</b>に入る。リアルタイムシャドウマップを使わず簡易な影ディスクで代替している点、ドクロやハロなど頻出オブジェクトを固定数のプールとして使い回している点など、負荷を意識した設計が随所に見られる。</p>
+    <p>初回の検証で「要注意」として指摘した<b>敵ザクのジオメトリ蓄積</b>と<b>高DPIスマホでの描画負荷</b>の2件は、いずれも追補対応で解消済み(§2・§3に詳細)。残るのは体感上ほぼ問題にならない「軽微」評価の2件のみで、現時点で緊急に手を入れるべき項目はない。</p>
+  </section>
+
+  <section>
+    <h2><span class="idx">§2</span>所見一覧</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>項目</th><th>評価</th><th>該当箇所</th><th>概要</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>影の描画方式</td><td><span class="chip good">良好</span></td><td class="ref">renderer.shadowMap 未使用</td><td>リアルタイムシャドウマップを使わず、平面ディスクの疑似影で代替。GPU負荷を大きく抑えている</td></tr>
+          <tr><td>ドクロ(敵)のオブジェクト管理</td><td><span class="chip good">良好</span></td><td class="ref">MAX_SKULLS=3</td><td>起動時に3体分のメッシュを生成して使い回すプール方式。プレイ中の新規ジオメトリ生成なし</td></tr>
+          <tr><td>敵ザクのオブジェクト管理</td><td><span class="chip resolved">対応済み</span></td><td class="ref">removeZaku()</td><td>消滅時に group.traverse() で全ジオメトリを dispose() するよう修正。マテリアルは共有のまま維持</td></tr>
+          <tr><td>パーティクル(爆発・噴射炎)</td><td><span class="chip good">良好</span></td><td class="ref">updateParticles</td><td>ジオメトリ共有・マテリアルは消滅時に確実に dispose() される設計</td></tr>
+          <tr><td>デバイスピクセル比への対応</td><td><span class="chip resolved">対応済み</span></td><td class="ref">setPixelRatio</td><td>Math.min(devicePixelRatio, 2) で上限をクランプするよう修正</td></tr>
+          <tr><td>メインループの安定性</td><td><span class="chip good">良好</span></td><td class="ref">loop(now)</td><td>1フレームあたりのdtを最大0.05秒にクランプし、フレーム落ち時の物理演算の暴走を防止</td></tr>
+          <tr><td>効果音生成(Web Audio)</td><td><span class="chip good">良好</span></td><td class="ref">createOscillator 等</td><td>都度生成・再生後は自動的にGC対象になる一般的な使い捨てノード設計。永続的なリークなし</td></tr>
+          <tr><td>同時爆発時の音声ノード数</td><td><span class="chip minor">軽微</span></td><td class="ref">applySkullHit</td><td>オーラ等で複数体を同時破壊すると、瞬間的にAudioNodeグラフが多重生成される。体感上の影響は小さいと推定</td></tr>
+          <tr><td>HUDのDOM更新頻度</td><td><span class="chip minor">軽微</span></td><td class="ref">timerEl / distanceEl</td><td>タイマー・走破距離の textContent を毎フレーム更新。テキストのみの更新で再レイアウト負荷は小さい</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="idx">§3</span>詳細</h2>
+
+    <div class="finding resolved">
+      <div class="fh"><span class="ft">敵ザクのジオメトリが破棄されずに蓄積する</span><span class="chip resolved">対応済み</span></div>
+      <div class="fbody">
+        <p><code>spawnZaku()</code> は呼び出されるたびに <code>createZakuMesh()</code> を通じて胴体・頭部・腕2本・脚2本ぶんの新規ジオメトリ(合計約14個)を生成する。マテリアルはグローバルに1組だけ使い回されているため問題ないが、ジオメトリはザク1体ごとに専用のインスタンスが作られる。</p>
+        <p>従来の <code>removeZaku(i)</code> は <code>scene.remove(zakus[i].mesh.group)</code> のみを行い、各ジオメトリの <code>.dispose()</code> を呼んでいなかった。</p>
+        <p class="done">✓ 対応: removeZaku() の先頭で <code>mesh.group.traverse(obj =&gt; obj.geometry?.dispose())</code> を実行し、消滅時に全ジオメトリを確実に破棄するよう修正した。共有マテリアル(zakuBodyMat等)はtraverseが触れるのは.geometryのみのため影響を受けず、他の生存中のザクの見た目にも一切影響しない。全ての消滅経路(タックル成立・ジョジョ立ち/オーラでの撃破・難易度選択画面へのリセット)はいずれも removeZaku() を経由しているため、漏れなく対応済み。</p>
+        <p class="fix">応急対応(dispose追加)を採用し、プール化(根本対応)は見送った。理由は§4を参照。</p>
+      </div>
+    </div>
+
+    <div class="finding resolved">
+      <div class="fh"><span class="ft">高DPI端末でのピクセル密度が無制限</span><span class="chip resolved">対応済み</span></div>
+      <div class="fbody">
+        <p>従来の <code>renderer.setPixelRatio(window.devicePixelRatio || 1)</code> は端末のピクセル比をそのまま採用しており、DPR=3のスマートフォン(iPhoneの上位機種など)ではDPR=1の環境と比べて実描画ピクセル数が9倍になっていた。</p>
+        <p class="done">✓ 対応: <code>renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))</code> に変更し、上限を2にクランプした。DPR=2以下の端末(大半のAndroid機や旧世代iPhone)には影響がなく、DPR=3の高級機のみ描画ピクセル数が9倍→4倍に抑えられる。resize時にsetPixelRatioを再呼び出しする実装ではないため、上限の適用漏れもない。</p>
+      </div>
+    </div>
+
+    <div class="finding good">
+      <div class="fh"><span class="ft">ドクロ・ハロはオブジェクトプールで管理</span><span class="chip good">良好</span></div>
+      <div class="fbody">
+        <p>ドクロは <code>MAX_SKULLS=3</code> 体分のメッシュを起動時に一括生成し、以後は同じメッシュの位置・状態だけを使い回すプール方式になっている。ハロ・ラスボスも単一インスタンスの使い回し。これらはプレイ時間に関わらずジオメトリ数が増減しないため、敵ザクのような蓄積は起きない。敵ザクも同様のプール化が可能な設計であり、§4の推奨対応で触れる。</p>
+      </div>
+    </div>
+
+    <div class="finding good">
+      <div class="fh"><span class="ft">パーティクルはジオメトリ共有・マテリアルは確実に破棄</span><span class="chip good">良好</span></div>
+      <div class="fbody">
+        <p>爆発・ジャンプ噴射炎とも、球体ジオメトリ(<code>particleGeo</code>)を全パーティクルで共有しつつ、個体ごとに独立させる必要があるマテリアルだけ都度生成している。寿命が尽きたパーティクルは <code>scene.remove()</code> に加えて <code>p.mesh.material.dispose()</code> が呼ばれており、敵ザクとは対照的にメモリ管理が徹底されている。</p>
+      </div>
+    </div>
+
+  </section>
+
+  <section>
+    <h2><span class="idx">§4</span>対応方針と実施内容</h2>
+    <p class="lead">2件とも対応済み。それぞれの選択理由は以下のとおり。</p>
+    <ul class="reco-list">
+      <li><span class="n">✓</span><div><div class="t">敵ザク: removeZaku() 内でジオメトリを dispose() する応急対応を採用</div><div class="d">プール化(根本対応)は、敵ザクに「同時出現数の上限」という新しい制約を持ち込む。現状は評判が良ければ回避され続けて無制限に増え続ける設計であり、プールサイズをいくつに決めるかは負荷対策の範囲を超えたゲームバランスの意思決定になる。dispose()のみの応急対応であれば出現ロジック・難易度カーブに一切手を加えずにメモリリークだけを解消できるため、こちらを採用した</div></div></li>
+      <li><span class="n">✓</span><div><div class="t">setPixelRatio に上限(Math.min(window.devicePixelRatio, 2))を追加</div><div class="d">見た目への影響がほぼ知覚できない一方、高DPI端末での描画負荷を確実に抑えられるため、リスクなく採用</div></div></li>
+    </ul>
+  </section>
+
+  <section>
+    <h2><span class="idx">§5</span>検証手法について</h2>
+    <div class="caveat">
+      <div class="head">Methodology Note</div>
+      <p>本レポートは <code>zakusim.html</code> のソースコードを読み、Three.jsのオブジェクト生成・破棄パターン、レンダラー設定、メインループの構造、Web Audioのノード生成パターンを精査した<b>静的コードレビュー</b>に基づく。Chrome DevToolsのPerformanceタブ・Memoryタブによる実測(FPS推移、ヒープスナップショット等)は行っていない。</p>
+      <p>ここに挙げた影響度(要注意/軽微/良好)は、コード構造から推定される相対的なリスクの目安であり、実機での体感フレームレートや正確なメモリ増加量を保証するものではない。より厳密な数値が必要な場合は、実機のChrome DevToolsでPerformance記録とMemoryスナップショット比較(特にLv.2を10分以上プレイした前後)を取ることを推奨する。</p>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  検証対象: zakusim.html(three.js r128) / 検証方法: 静的コードレビュー / 実測プロファイリングは未実施
+</footer>
