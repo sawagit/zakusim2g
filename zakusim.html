@@ -139,7 +139,6 @@
     #fullscreenBtn { display:block; } /* Fullscreen API非対応の端末ではJS側でさらに非表示にする */
     #trophyToast { font-size:10px; padding:5px 12px; white-space:nowrap; }
     #trophyToast .name { font-size:8px; white-space:nowrap; }
-    #theWorldCountdown { font-size:58px; } /* スマホはPC比で6px小さく表示する(当初2px→さらに4pt減) */
   }
   .diffbtn {
     font-family: -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
@@ -262,9 +261,9 @@
   }
   .actbtn:active { background:rgba(255,255,255,0.7); }
   #btnJump { width:76px; height:76px; font-size:16px; }
-  #btnTetsu { font-size:10px; display:none; } /* ザ・世界使用可能になるまで非表示(JS側でtheWorldChargedに連動して切り替える) */
+  #btnTetsu { font-size:10px; visibility:hidden; } /* 配置は保ったまま、使用可能になるまで見た目だけ隠す(JS側でtheWorldChargedに連動して切り替える) */
   #btnTetsu.ready {
-    display:flex; background:rgba(255,230,140,0.85); border-color:rgba(200,170,60,0.9);
+    visibility:visible; background:rgba(255,230,140,0.85); border-color:rgba(200,170,60,0.9);
     animation:tetsuReadyBlink 2.2s ease-in-out infinite;
   }
   @keyframes tetsuReadyBlink { 0%,100%{opacity:1;} 50%{opacity:0.45;} }
@@ -299,12 +298,12 @@
   #theWorldCountdown {
     display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); z-index:12;
     font-family: -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
-    font-size:64px; font-weight:bold; color:#ffcc33; letter-spacing:2px;
+    font-size:clamp(34px, 11vw, 64px); font-weight:bold; color:#ffcc33; letter-spacing:2px;
     text-shadow:0 0 16px rgba(255,204,51,0.95), 0 0 4px rgba(0,0,0,0.8);
-    pointer-events:none; user-select:none;
+    pointer-events:none; user-select:none; white-space:nowrap;
   }
   #trophyToast {
-    display:none; position:fixed; top:130px; left:50%; transform:translateX(-50%); z-index:13;
+    display:none; position:fixed; top:190px; left:50%; transform:translateX(-50%); z-index:13;
     font-family: -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
     font-size:19px; font-weight:bold; color:#2a1a00; text-align:center;
     background:linear-gradient(180deg,#ffe27a,#ffb300); border:2px solid #7a4a00; border-radius:10px;
@@ -4679,11 +4678,12 @@ function finishGame(isVictory){
 // ランキング入りタイムのニックネーム登録を確定する(入力欄の「登録」ボタン、またはEnterキーから呼ばれる)
 function confirmRankingName(){
   if (!awaitingNameEntry) return;
-  let name = (goNameInputEl.value || '').trim().slice(0, 10);
-  if (!name) name = 'NONAME';
-  saveLastName(name);
-  insertRanking(pendingRankingDiff, pendingRankingTime, name);
-  submitWorldRanking(pendingRankingDiff, pendingRankingTime, name);
+  const name = (goNameInputEl.value || '').trim().slice(0, 10);
+  if (name){
+    saveLastName(name);
+    insertRanking(pendingRankingDiff, pendingRankingTime, name);
+    submitWorldRanking(pendingRankingDiff, pendingRankingTime, name);
+  } // 名前を空欄のまま登録した場合は、ローカル・世界ランキングともスコアを登録しない
   const diff = pendingRankingDiff;
   awaitingNameEntry = false;
   pendingRankingDiff = null;
@@ -5248,7 +5248,7 @@ const DIGEST_ZAKU_POOL_SIZE = 6; // 再生専用の敵ザク表示枠(生ゲー�
 // カメラ演出: プレイヤーの斜め前(あおり気味)から正面(見下ろし気味)へ45°回り込みながらズームインする
 const DIGEST_CAM_YAW_FROM = 45*D2R, DIGEST_CAM_YAW_TO = 0;
 const DIGEST_CAM_PITCH_FROM = -8*D2R, DIGEST_CAM_PITCH_TO = 45*D2R;
-const DIGEST_CAM_DIST_FROM = 38, DIGEST_CAM_DIST_TO = 16;
+const DIGEST_CAM_DIST_FROM = 65, DIGEST_CAM_DIST_TO = 16;
 
 let digestClockNow = 0;           // 記録専用の時計(ラスボス演出中・ザ・世界中でも止めない。elapsedTimeとは別物)
 let digestRingBuffer = [];        // 直近DIGEST_PRE_ROLL秒ぶんの記録(常時更新)
