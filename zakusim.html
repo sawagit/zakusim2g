@@ -64,6 +64,10 @@
     padding:6px 12px; user-select:none; pointer-events:none;
   }
   #gpIndicator.show { display:block; }
+  #gpHint {
+    display:none; margin-top:6px; padding-top:6px; border-top:1px solid rgba(0,0,0,0.15);
+  }
+  #gpHint.show { display:block; }
   #pauseOverlay {
     display:none; position:fixed; bottom:8px; left:50%; transform:translateX(-50%); z-index:17;
     font-family: -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
@@ -371,6 +375,12 @@
   Space : ジャンプ &nbsp; J : ジョジョ立ち &nbsp; W : ザ・世界<br>
   ドラッグ : 視点回転 &nbsp; ホイール : ズーム(10〜150m)<br>
   <b>全高17m・重量10t</b>
+  <div id="gpHint">
+    <b>🎮 コントローラー操作</b><br>
+    左スティック : 移動 &nbsp; 右スティック : 視点回転<br>
+    A/× : ジャンプ &nbsp; X/□ : ジョジョ立ち &nbsp; Y/△ : ザ・世界<br>
+    L2/R2 : ズーム &nbsp; Start/Options : ポーズ
+  </div>
 </div>
 <div id="timer">0.0s</div>
 <div id="distance">走破距離: 0.0m</div>
@@ -3929,6 +3939,7 @@ let gpIndex = null;      // 接続中のゲームパッドのindex(未接続な�
 let gpActiveDir = null;  // 左スティックで現在押下扱いになっている方向(DIR8のいずれか、またはnull)
 let gpPrevButtons = [];  // 直前フレームのボタン押下状態(立ち上がり検出用)
 const gpIndicatorEl = document.getElementById('gpIndicator');
+const gpHintEl = document.getElementById('gpHint'); // PC操作説明欄に出すコントローラー割り当て(接続中のみ表示)
 
 // gamepadconnectedイベントは、埋め込みiframe環境などでは確実に発火しないケースがあるため
 // (実際に接続検知アイコンすら出ない不具合が起きた)、イベントには依存せず、毎フレーム
@@ -3937,10 +3948,12 @@ function gpSetConnected(gp){
   gpIndex = gp.index;
   gpPrevButtons = gp.buttons.map(b => !!(b && b.pressed));
   gpIndicatorEl.classList.add('show');
+  gpHintEl.classList.add('show');
 }
 function gpSetDisconnected(){
   gpIndex = null;
   gpIndicatorEl.classList.remove('show');
+  gpHintEl.classList.remove('show');
   if (gpActiveDir){ gpActiveDir.keys.forEach(releaseMoveKey); gpActiveDir = null; }
 }
 
