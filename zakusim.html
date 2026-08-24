@@ -5244,10 +5244,19 @@ function updateHaro(dt){
 const DIGEST_PRE_ROLL = 2.0;   // イベント発生の何秒前から含めるか(調整可能)
 const DIGEST_POST_ROLL = 0.5;  // イベント発生後、何秒追加で含めるか(調整可能)
 const DIGEST_CLIP_COUNT = 3;   // 再生するクリップ数(記録できた数がこれより少ない場合はある分だけ)
+// 検証用: 無敵モードで開始したプレイに限り、前後5秒ずつ・記録できた全クリップを再生する(狙った瞬間が撮れているか確認しやすくするため)
+const DIGEST_DEBUG_PRE_ROLL = 5.0;
+const DIGEST_DEBUG_POST_ROLL = 5.0;
+const DIGEST_EVENT_ORDER = ['first_block','first_multijump','first_world','jojo_kill','time_20s','boss_defeat']; // 検証再生時の表示順(だいたい発生が早い順)
+function digestPreRollSec(){ return invincibleMode ? DIGEST_DEBUG_PRE_ROLL : DIGEST_PRE_ROLL; }
+function digestPostRollSec(){ return invincibleMode ? DIGEST_DEBUG_POST_ROLL : DIGEST_POST_ROLL; }
 const DIGEST_ZAKU_POOL_SIZE = 6; // 再生専用の敵ザク表示枠(生ゲーム側のzakus配列とは独立させる。可変長配列のため)
-// カメラ演出: プレイヤーの斜め前(あおり気味)から正面(見下ろし気味)へ45°回り込みながらズームインする
-const DIGEST_CAM_YAW_FROM = 45*D2R, DIGEST_CAM_YAW_TO = 0;
-const DIGEST_CAM_PITCH_FROM = -8*D2R, DIGEST_CAM_PITCH_TO = 45*D2R;
+// カメラ演出: プレイヤーの斜め前(顔が見える側)から正面へ45°回り込みながらズームインする
+// yawの基準はカメラを「プレイヤーが向いている方向」に置く値(=通常プレイの背面カメラと同じ側)なので、
+// 顔を見せるにはその反対側(+180°)を基準にする。あおり(下から見上げる)角も、通常プレイでは絶対に出てこない
+// 大きく低い角度から始めて、そこを積極的に見せる
+const DIGEST_CAM_YAW_FROM = 180*D2R + 45*D2R, DIGEST_CAM_YAW_TO = 180*D2R;
+const DIGEST_CAM_PITCH_FROM = -30*D2R, DIGEST_CAM_PITCH_TO = 45*D2R;
 const DIGEST_CAM_DIST_FROM = 65, DIGEST_CAM_DIST_TO = 16;
 
 let digestClockNow = 0;           // 記録専用の時計(ラスボス演出中・ザ・世界中でも止めない。elapsedTimeとは別物)
@@ -5307,13 +5316,13 @@ function digestRecordFrame(dt){
   digestClockNow += dt;
   const frame = digestCaptureFrame();
   digestRingBuffer.push(frame);
-  while (digestRingBuffer.length && digestRingBuffer[0].t < digestClockNow - DIGEST_PRE_ROLL) digestRingBuffer.shift();
+  while (digestRingBuffer.length && digestRingBuffer[0].t < digestClockNow - digestPreRollSec()) digestRingBuffer.shift();
 
   for (let i=digestPendingCaptures.length-1;i>=0;i--){
     const job = digestPendingCaptures[i];
     job.frames.push(frame);
     job.postRollAccum += dt;
-    if (job.postRollAccum >= DIGEST_POST_ROLL){
+    if (job.postRollAccum >= digestPostRollSec()){
       digestCapturedClips[job.eventId] = job.frames;
       digestPendingCaptures.splice(i,1);
     }
@@ -5328,11 +5337,16 @@ function triggerDigestCapture(eventId){
 }
 
 // 記録できたクリップからランダムにDIGEST_CLIP_COUNT件選び、再生を開始する。1件も無ければfalseを返す(呼び出し側で通常のGAME OVERへ進む)
+// 検証用: 無敵モードで開始したプレイに限り、ランダム選出をせず記録できた全クリップを再生する
 function startDigestPlayback(){
   const ids = Object.keys(digestCapturedClips);
   if (!ids.length) return false;
-  for (let i=ids.length-1;i>0;i--){ const j = Math.floor(Math.random()*(i+1)); [ids[i],ids[j]] = [ids[j],ids[i]]; }
-  digestClips = ids.slice(0, DIGEST_CLIP_COUNT).map(id => digestCapturedClips[id]);
+  if (invincibleMode){
+    digestClips = DIGEST_EVENT_ORDER.filter(id => digestCapturedClips[id]).map(id => digestCapturedClips[id]);
+  } else {
+    for (let i=ids.length-1;i>0;i--){ const j = Math.floor(Math.random()*(i+1)); [ids[i],ids[j]] = [ids[j],ids[i]]; }
+    digestClips = ids.slice(0, DIGEST_CLIP_COUNT).map(id => digestCapturedClips[id]);
+  }
   digestClipIndex = 0;
   digestClipTimer = 0;
   digestClipDuration = digestClipDurationOf(digestClips[0]);
