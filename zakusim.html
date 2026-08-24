@@ -1713,16 +1713,13 @@ function qblockPlacementTarget(diff){
   if (diff === 2) return 8;
   return qblocks.length;
 }
-// ラスボスが出現する物資ブロック取得数(第一部だけ、全数を待たずに早めに出現させる)
+// ラスボスは、配置された物資ブロックを全て取得した瞬間に出現する(難易度共通)
 function qblockBossThreshold(diff){
-  if (diff === 1) return 3;
-  return qblockTotalCount; // 第二部・第三部は従来通り「全部取得」で出現
+  return qblockTotalCount;
 }
-// 「あと一つッッ！」トロフィー(qblock_9のテキストを流用)を出す取得数目(難易度によって全数に対する位置が異なる)
+// 「あと一つッッ！」トロフィー(qblock_9のテキストを流用)は、全数のひとつ手前の取得時に表示する(難易度共通)
 function qblockLastWarningCount(diff){
-  if (diff === 1) return 4;
-  if (diff === 2) return 7;
-  return 9; // 第三部は従来通り9個目
+  return qblockTotalCount - 1;
 }
 
 function placeQBlocks(){
@@ -4993,11 +4990,11 @@ function updateQBlock(dt){
       awardTrophy('qblock_'+qblocksCollected); // 1〜9個目はそれぞれ専用のカウントトロフィー(全数取得時は下記の分岐が扱う)
     }
     if (qblocksCollected === qblockBossThreshold(difficulty)){
-      spawnBoss(); // 第一部だけ全数を待たずに早めに出現する(詳細はqblockBossThreshold参照)
+      spawnBoss(); // 物資ブロックを全数取得した瞬間に出現する(難易度共通)
     }
     if (qblocksCollected >= qblockTotalCount){
       form2Infinite = true; // 最後の１個を取得した後はフォーム2の時間制限がなくなる
-      if (difficulty !== 1) awardTrophy('all_blocks'); // 第一部はボスが先に出現済みのため、全数回収時は上記の「あと一つ」表示のみとし、全部落とした！は出さない
+      awardTrophy('all_blocks');
     }
   }
 }
