@@ -1983,6 +1983,7 @@ function currentJojoRange(){
   return playerForm === 2 ? JOJO_DESTROY_RANGE_FORM2 : JOJO_DESTROY_RANGE;
 }
 function showJojoDome(cx, cy, cz){
+  digestLogEffect('dome', cx, cy, cz); // ハイライトダイジェスト用
   jojoDome.position.set(cx, cy, cz); // ジャンプ中に発動した場合、その時点の高さに連動する(常に地上基準にはしない)
   const s = currentJojoRange() / JOJO_DESTROY_RANGE;
   jojoDome.scale.set(s, s, s);
@@ -2037,6 +2038,7 @@ function updateSkullBlast(dt){
 const particles = [];
 const particleGeo = new THREE.SphereGeometry(1,8,6);
 function spawnExplosion(x,y,z,opts){
+  digestLogEffect('explosion', x, y, z); // ハイライトダイジェスト用(位置のみ記録し、opts等の見た目の細部は再生時のデフォルトに委ねる)
   opts = opts || {};
   const count = opts.count || 14;
   const colorA = opts.colorA !== undefined ? opts.colorA : 0xff8800;
@@ -3394,6 +3396,7 @@ function resetGame(){
   stopBGM();
   stopThrusterSound();
   digestResetAll();
+  diffPressActive = false;
   for (const k in keysDown) keysDown[k] = false; // デモの自動プレイ入力等が押しっぱなしのまま残ってしまうのを防ぐ(通常のキー入力もここで一旦すべて解放する)
   characterRoot.visible = true;
   pos.x = 0; pos.z = 0; yaw = 0;
@@ -3628,6 +3631,7 @@ function pressTetsuzanko(){
 }
 
 const diffKeyDownAt = {}; // '1'/'2'キーを押した時刻(離した瞬間に押していた時間を測り、3秒以上なら無敵モードで開始する)
+let diffPressActive = false; // 無敵モード判定の長押し中かどうか(キーボード・タッチ共通)。押している間は自動デモの開始タイマーを進めない
 
 // 裏技: ジョジョ立ちのボタン(Jキー/ジョジョボタン)を5秒間離さずに押し続けると、その時点で自動的に発動する
 let jojoHoldTimer = null;
@@ -3670,6 +3674,7 @@ window.addEventListener('keydown', (e)=>{
     if (rankingOverlayOpen) return; // ランキング表示中はゲーム開始キーを無視する
     if (!e.repeat && (e.key === '1' || e.key === '2' || (e.key === '3' && part3Unlocked))){
       diffKeyDownAt[e.key] = performance.now();
+      diffPressActive = true;
     }
     return;
   }
@@ -3709,6 +3714,7 @@ window.addEventListener('keyup', (e)=>{
   if (awaitingDifficulty && (e.key === '1' || e.key === '2' || e.key === '3') && diffKeyDownAt[e.key]){
     const held = performance.now() - diffKeyDownAt[e.key];
     diffKeyDownAt[e.key] = null;
+    diffPressActive = false;
     startGame(e.key === '1' ? 1 : e.key === '2' ? 2 : 3, held >= 3000); // 3秒以上押しっぱなしで離した場合は無敵モードで開始する
   }
   if (e.key === 'j' || e.key === 'J') cancelJojoHoldTimer();
@@ -3832,11 +3838,13 @@ function wireDiffButton(id, diff){
     e.preventDefault(); ensureAudio();
     if (!awaitingDifficulty) return;
     downAt = performance.now();
+    diffPressActive = true;
   }, { passive:false });
   function release(){
     if (!awaitingDifficulty || !downAt) return;
     const held = performance.now() - downAt;
     downAt = 0;
+    diffPressActive = false;
     startGame(diff, held >= 3000);
   }
   el.addEventListener('touchend', release);
@@ -5260,23 +5268,29 @@ function digestPostRollSec(){ return invincibleMode ? DIGEST_DEBUG_POST_ROLL : D
 const DIGEST_ZAKU_POOL_SIZE = 6; // 再生専用の敵ザク表示枠(生ゲーム側のzakus配列とは独立させる。可変長配列のため)
 // カメラ演出: プレイヤーの斜め前(顔が見える側)から正面へ45°回り込みながらズームインする
 // yawの基準はカメラを「プレイヤーが向いている方向」に置く値(=通常プレイの背面カメラと同じ側)なので、
-// 顔を見せるにはその反対側(+180°)を基準にする。あおり(下から見上げる)角も、通常プレイでは絶対に出てこない
-// 大きく低い角度から始めて、そこを積極的に見せる
+// 顔を見せるにはその反対側(+180°)を基準にする
 const DIGEST_CAM_YAW_FROM = 180*D2R + 45*D2R, DIGEST_CAM_YAW_TO = 180*D2R;
-const DIGEST_CAM_PITCH_FROM = -30*D2R, DIGEST_CAM_PITCH_TO = 45*D2R;
-const DIGEST_CAM_DIST_FROM = 65, DIGEST_CAM_DIST_TO = 16;
+const DIGEST_CAM_PITCH_TO = 45*D2R;
+const DIGEST_CAM_PITCH_FROM_DRAMATIC = -30*D2R; // 通常プレイでは見られない大きな見上げアングル(地面に埋まりにくい状況だけで使う)
+const DIGEST_CAM_PITCH_FROM_MODEST = -10*D2R;   // 地面に埋まりやすい状況では控えめな角度にする
+const DIGEST_CAM_DIST_NEAR = 16, DIGEST_CAM_DIST_FAR = 65;
 
 let digestClockNow = 0;           // 記録専用の時計(ラスボス演出中・ザ・世界中でも止めない。elapsedTimeとは別物)
 let digestRingBuffer = [];        // 直近DIGEST_PRE_ROLL秒ぶんの記録(常時更新)
+let digestEffectRingBuffer = [];  // 直近の効果イベント(ジョジョドーム・爆発)の記録。フレームと同じ考え方でリングバッファにする
 let digestPendingCaptures = [];   // 確定待ち(post-roll記録中)のキャプチャジョブ
-let digestCapturedClips = {};     // イベントID→確定済みフレーム配列
+let digestCapturedClips = {};     // イベントID→{ eventId, frames, effects }
 let digestTime20Fired = false;
 
 let digestPlaybackActive = false;
-let digestClips = [];             // 今回再生する、ランダムに選ばれたクリップ(最大DIGEST_CLIP_COUNT件)
+let digestClips = [];             // 今回再生する、選ばれたクリップ({eventId,frames,effects}の配列)
 let digestClipIndex = 0;
 let digestClipTimer = 0;
 let digestClipDuration = 0;
+let digestClipEffectCursor = 0;   // 現在のクリップ内で、次に発火させる効果イベントのインデックス
+let digestClipCamParams = null;   // 現在のクリップのカメラ演出パラメータ(クリップ開始時に決定する)
+let digestZoomToggle = 0;         // クリップが切り替わるたびにズーム方向を交互に切り替えるためのカウンタ(リプレイをまたいでも持続する)
+let digestPrevFramePy = null;     // 前フレームの高さ(バーニア表示要否をその場で推定するのに使う)
 const digestZakuPool = []; // 再生専用の敵ザク表示枠(常に非表示で確保しておき、再生中だけ使う)
 for (let i=0;i<DIGEST_ZAKU_POOL_SIZE;i++){
   const m = createZakuMesh(false);
@@ -5288,6 +5302,7 @@ const digestLabelEl = document.getElementById('digestLabel');
 function digestResetAll(){
   digestClockNow = 0;
   digestRingBuffer = [];
+  digestEffectRingBuffer = [];
   digestPendingCaptures = [];
   digestCapturedClips = {};
   digestTime20Fired = false;
@@ -5309,6 +5324,7 @@ function digestCaptureFrame(){
     rArmHip: cur.rArmHip, rArmElbow: cur.rArmElbow, rArmSpread: cur.rArmSpread,
     lArmHip: cur.lArmHip, lArmElbow: cur.lArmElbow, lArmSpread: cur.lArmSpread,
     charVisible: characterRoot.visible,
+    worldActive: theWorldActive, // ザ・世界中のネガポジ反転を再生時にも再現するため
     // ドクロ・ハロは固定枠のプールなので、枠の対応を保つためnullで穴埋めして記録する
     skulls: skulls.map(s => s.group.visible ? { x:s.x, y:s.y, z:s.z, rotY:s.group.rotation.y } : null),
     haros: haros.map(h => h.mesh.visible ? { x:h.x, y:h.y, z:h.z } : null),
@@ -5316,6 +5332,15 @@ function digestCaptureFrame(){
     zakus: zakus.filter(z => z.mesh.group.visible).slice(0, DIGEST_ZAKU_POOL_SIZE).map(z => ({ x:z.x, y:z.y, z:z.z, rotY:z.mesh.group.rotation.y })),
     boss: bossActive ? { x:bossX, y:currentBossY(), z:bossZ, rotY:bossMesh.rotation.y } : null
   };
+}
+
+// ジョジョ立ちのドーム・爆発エフェクトの発生を記録する(showJojoDome/spawnExplosionから呼ばれる)。
+// パーティクルそのものは記録せず、再生時に同じ発生関数をもう一度呼んで「その場で演算」し直す方式にする
+function digestLogEffect(type, x, y, z){
+  const ef = { t: digestClockNow, type, x, y, z };
+  digestEffectRingBuffer.push(ef);
+  while (digestEffectRingBuffer.length && digestEffectRingBuffer[0].t < digestClockNow - digestPreRollSec()) digestEffectRingBuffer.shift();
+  for (const job of digestPendingCaptures) job.effects.push(ef);
 }
 
 // プレイ中は常時これを呼び、リングバッファと確定待ちジョブを進める(デモプレイ・再生中は呼ばない)
@@ -5330,7 +5355,7 @@ function digestRecordFrame(dt){
     job.frames.push(frame);
     job.postRollAccum += dt;
     if (job.postRollAccum >= digestPostRollSec()){
-      digestCapturedClips[job.eventId] = job.frames;
+      digestCapturedClips[job.eventId] = { eventId: job.eventId, frames: job.frames, effects: job.effects };
       digestPendingCaptures.splice(i,1);
     }
   }
@@ -5340,7 +5365,24 @@ function digestRecordFrame(dt){
 function triggerDigestCapture(eventId){
   if (digestCapturedClips[eventId]) return;
   if (digestPendingCaptures.some(j => j.eventId === eventId)) return;
-  digestPendingCaptures.push({ eventId, postRollAccum:0, frames: digestRingBuffer.slice() });
+  digestPendingCaptures.push({ eventId, postRollAccum:0, frames: digestRingBuffer.slice(), effects: digestEffectRingBuffer.slice() });
+}
+
+// クリップごとのカメラ演出パラメータを決める。ズーム方向はクリップが切り替わるたびに交互になる。
+// あおり(下から見上げる)角は地面に埋まりやすいので、地面に埋まりにくい状況(イン→アウト、またはジャンプ中のクリップ)でだけ大きく見せ、
+// それ以外(アウト→イン、かつジャンプ以外)は控えめな角度にする
+function digestCamParamsFor(eventId){
+  const zoomInToOut = (digestZoomToggle % 2 === 1); // true = 近→遠(イン→アウト)
+  digestZoomToggle++;
+  const isJump = (eventId === 'first_multijump');
+  const useDramaticPitch = zoomInToOut || isJump;
+  return {
+    yawFrom: DIGEST_CAM_YAW_FROM, yawTo: DIGEST_CAM_YAW_TO,
+    pitchFrom: useDramaticPitch ? DIGEST_CAM_PITCH_FROM_DRAMATIC : DIGEST_CAM_PITCH_FROM_MODEST,
+    pitchTo: DIGEST_CAM_PITCH_TO,
+    distFrom: zoomInToOut ? DIGEST_CAM_DIST_NEAR : DIGEST_CAM_DIST_FAR,
+    distTo:   zoomInToOut ? DIGEST_CAM_DIST_FAR  : DIGEST_CAM_DIST_NEAR
+  };
 }
 
 // 記録できたクリップからランダムにDIGEST_CLIP_COUNT件選び、再生を開始する。1件も無ければfalseを返す(呼び出し側で通常のGAME OVERへ進む)
@@ -5356,16 +5398,24 @@ function startDigestPlayback(){
   }
   digestClipIndex = 0;
   digestClipTimer = 0;
-  digestClipDuration = digestClipDurationOf(digestClips[0]);
+  startDigestClip(digestClips[0]);
   digestPlaybackActive = true;
   if (digestLabelEl) digestLabelEl.style.display = 'block';
   return true;
 }
 function digestClipDurationOf(clip){
-  return Math.max(0.001, clip[clip.length-1].t - clip[0].t);
+  const frames = clip.frames;
+  return Math.max(0.001, frames[frames.length-1].t - frames[0].t);
+}
+// クリップ再生開始時の共通処理(カメラ演出パラメータの決定、効果イベント発火カーソル・バーニア推定用の前フレームのリセット)
+function startDigestClip(clip){
+  digestClipDuration = digestClipDurationOf(clip);
+  digestClipCamParams = digestCamParamsFor(clip.eventId);
+  digestClipEffectCursor = 0;
+  digestPrevFramePy = null;
 }
 
-function applyDigestFrame(frame){
+function applyDigestFrame(frame, dt){
   pos.x = frame.px; airY = frame.py; pos.z = frame.pz; yaw = frame.yaw;
   cur.tiltX=frame.tiltX; cur.tiltZ=frame.tiltZ; cur.headYaw=frame.headYaw; cur.hipY=frame.hipY; cur.bodyYawOffset=frame.bodyYawOffset;
   cur.rLegHip=frame.rLegHip; cur.rLegKnee=frame.rLegKnee; cur.rLegSpread=frame.rLegSpread;
@@ -5375,6 +5425,7 @@ function applyDigestFrame(frame){
   characterRoot.visible = frame.charVisible;
   applyPose();
   updateShadow();
+  invertWorldColors(frame.worldActive); // ザ・世界中のネガポジ反転を再現する
 
   skulls.forEach((s,i) => {
     const d = frame.skulls[i];
@@ -5398,15 +5449,34 @@ function applyDigestFrame(frame){
     bossMesh.rotation.y = frame.boss.rotY;
     bossShadowMesh.position.set(frame.boss.x, 0.03, frame.boss.z);
   }
+
+  // ジャンプのバーニア(スラスター)は記録していないので、前フレームとの高さの差から上昇中かどうかをその場で推定して再現する
+  if (digestPrevFramePy !== null){
+    vy = (frame.py > digestPrevFramePy + 0.001) ? 1 : -1;
+    updateJumpThruster(dt);
+  }
+  digestPrevFramePy = frame.py;
 }
 
 // クリップ内の経過時間に最も近い記録フレームを探す(クリップは高々3秒程度なので素朴な線形探索で十分)
 function findDigestFrame(clip, localT){
-  let frame = clip[clip.length-1];
-  for (let i=0;i<clip.length;i++){
-    if (clip[i].t - clip[0].t >= localT){ frame = clip[i]; break; }
+  const frames = clip.frames;
+  let frame = frames[frames.length-1];
+  for (let i=0;i<frames.length;i++){
+    if (frames[i].t - frames[0].t >= localT){ frame = frames[i]; break; }
   }
   return frame;
+}
+
+// クリップに記録された効果イベント(ジョジョドーム・爆発)のうち、現在時刻までに発生したものを発火させる
+function fireDigestEffects(clip, localT){
+  const effects = clip.effects, baseT = clip.frames[0].t;
+  while (digestClipEffectCursor < effects.length && (effects[digestClipEffectCursor].t - baseT) <= localT){
+    const ef = effects[digestClipEffectCursor];
+    if (ef.type === 'dome') showJojoDome(ef.x, ef.y, ef.z);
+    else if (ef.type === 'explosion') spawnExplosion(ef.x, ef.y, ef.z);
+    digestClipEffectCursor++;
+  }
 }
 
 function updateDigestPlayback(dt){
@@ -5414,25 +5484,27 @@ function updateDigestPlayback(dt){
   if (!clip){ finishDigestPlayback(); return; }
   digestClipTimer += dt;
   const frame = findDigestFrame(clip, digestClipTimer);
-  applyDigestFrame(frame);
+  applyDigestFrame(frame, dt);
+  fireDigestEffects(clip, digestClipTimer);
   updateDigestCamera(clamp(digestClipTimer/digestClipDuration, 0, 1), frame);
 
   if (digestClipTimer >= digestClipDuration){
     digestClipIndex++;
     digestClipTimer = 0;
     if (digestClipIndex < digestClips.length){
-      digestClipDuration = digestClipDurationOf(digestClips[digestClipIndex]);
+      startDigestClip(digestClips[digestClipIndex]);
     } else {
       finishDigestPlayback();
     }
   }
 }
 
-// プレイヤーを中心に、斜め前(あおり)→正面(見下ろし)へ45°回り込みながらズームインする決め打ちのカメラワーク
+// プレイヤーを中心に、クリップごとに決めたカメラワーク(あおり⇄見下ろし、ズームイン⇄アウト)で撮る
 function updateDigestCamera(f, frame){
-  const camYaw = frame.yaw + DIGEST_CAM_YAW_FROM + (DIGEST_CAM_YAW_TO-DIGEST_CAM_YAW_FROM)*f;
-  const camPitch = DIGEST_CAM_PITCH_FROM + (DIGEST_CAM_PITCH_TO-DIGEST_CAM_PITCH_FROM)*f;
-  const camDist = DIGEST_CAM_DIST_FROM + (DIGEST_CAM_DIST_TO-DIGEST_CAM_DIST_FROM)*f;
+  const p = digestClipCamParams;
+  const camYaw = frame.yaw + p.yawFrom + (p.yawTo-p.yawFrom)*f;
+  const camPitch = p.pitchFrom + (p.pitchTo-p.pitchFrom)*f;
+  const camDist = p.distFrom + (p.distTo-p.distFrom)*f;
   const tx = frame.px, ty = 9 + frame.py, tz = frame.pz;
   camera.position.x = tx + camDist*Math.cos(camPitch)*Math.sin(camYaw);
   camera.position.y = ty + camDist*Math.sin(camPitch);
@@ -5444,6 +5516,8 @@ function finishDigestPlayback(){
   digestPlaybackActive = false;
   if (digestLabelEl) digestLabelEl.style.display = 'none';
   digestZakuPool.forEach(m => m.group.visible = false);
+  invertWorldColors(false); // 再生中にネガポジ反転していた場合に備え、通常の配色に戻しておく
+  stopThrusterSound(); // 再生中にバーニア音が鳴っていた場合に備えて止めておく
   if (gameOver){
     // GAME OVER画面の「もう一度見る」ボタンからの再生だった場合は、finishGameをやり直さずそのまま画面に戻るだけにする
     gameoverEl.style.display = 'flex';
@@ -5467,8 +5541,12 @@ function loop(now){
   updateTutorialIntro(dt); // チュートリアル導入メッセージ(メッセージ0)の10秒タイマー。paused中でも進める必要があるため通常のゲート外で呼ぶ
 
   if (awaitingDifficulty && !rankingOverlayOpen){
-    titleIdleTimer += dt;
-    if (titleIdleTimer >= TITLE_DEMO_IDLE) startDemo();
+    if (diffPressActive){
+      titleIdleTimer = 0; // 無敵モード判定の長押し中は自動デモの開始タイマーを進めない(離すと通常通りゼロから再開する)
+    } else {
+      titleIdleTimer += dt;
+      if (titleIdleTimer >= TITLE_DEMO_IDLE) startDemo();
+    }
   }
   updatePart2TeaseBanner(dt);
   if (digestPlaybackActive){
