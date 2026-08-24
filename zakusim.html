@@ -3394,6 +3394,7 @@ function resetGame(){
   stopBGM();
   stopThrusterSound();
   digestResetAll();
+  diffPressActive = false;
   for (const k in keysDown) keysDown[k] = false; // デモの自動プレイ入力等が押しっぱなしのまま残ってしまうのを防ぐ(通常のキー入力もここで一旦すべて解放する)
   characterRoot.visible = true;
   pos.x = 0; pos.z = 0; yaw = 0;
@@ -3628,6 +3629,7 @@ function pressTetsuzanko(){
 }
 
 const diffKeyDownAt = {}; // '1'/'2'キーを押した時刻(離した瞬間に押していた時間を測り、3秒以上なら無敵モードで開始する)
+let diffPressActive = false; // 無敵モード判定の長押し中かどうか(キーボード・タッチ共通)。押している間は自動デモの開始タイマーを進めない
 
 // 裏技: ジョジョ立ちのボタン(Jキー/ジョジョボタン)を5秒間離さずに押し続けると、その時点で自動的に発動する
 let jojoHoldTimer = null;
@@ -3670,6 +3672,7 @@ window.addEventListener('keydown', (e)=>{
     if (rankingOverlayOpen) return; // ランキング表示中はゲーム開始キーを無視する
     if (!e.repeat && (e.key === '1' || e.key === '2' || (e.key === '3' && part3Unlocked))){
       diffKeyDownAt[e.key] = performance.now();
+      diffPressActive = true;
     }
     return;
   }
@@ -3709,6 +3712,7 @@ window.addEventListener('keyup', (e)=>{
   if (awaitingDifficulty && (e.key === '1' || e.key === '2' || e.key === '3') && diffKeyDownAt[e.key]){
     const held = performance.now() - diffKeyDownAt[e.key];
     diffKeyDownAt[e.key] = null;
+    diffPressActive = false;
     startGame(e.key === '1' ? 1 : e.key === '2' ? 2 : 3, held >= 3000); // 3秒以上押しっぱなしで離した場合は無敵モードで開始する
   }
   if (e.key === 'j' || e.key === 'J') cancelJojoHoldTimer();
@@ -3832,11 +3836,13 @@ function wireDiffButton(id, diff){
     e.preventDefault(); ensureAudio();
     if (!awaitingDifficulty) return;
     downAt = performance.now();
+    diffPressActive = true;
   }, { passive:false });
   function release(){
     if (!awaitingDifficulty || !downAt) return;
     const held = performance.now() - downAt;
     downAt = 0;
+    diffPressActive = false;
     startGame(diff, held >= 3000);
   }
   el.addEventListener('touchend', release);
@@ -5467,8 +5473,12 @@ function loop(now){
   updateTutorialIntro(dt); // チュートリアル導入メッセージ(メッセージ0)の10秒タイマー。paused中でも進める必要があるため通常のゲート外で呼ぶ
 
   if (awaitingDifficulty && !rankingOverlayOpen){
-    titleIdleTimer += dt;
-    if (titleIdleTimer >= TITLE_DEMO_IDLE) startDemo();
+    if (diffPressActive){
+      titleIdleTimer = 0; // 無敵モード判定の長押し中は自動デモの開始タイマーを進めない(離すと通常通りゼロから再開する)
+    } else {
+      titleIdleTimer += dt;
+      if (titleIdleTimer >= TITLE_DEMO_IDLE) startDemo();
+    }
   }
   updatePart2TeaseBanner(dt);
   if (digestPlaybackActive){
