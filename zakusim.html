@@ -76,7 +76,12 @@
   #vsResultText.vsResult-WIN { color:#ffcc33; text-shadow:0 0 20px rgba(255,204,51,0.7); }
   #vsResultText.vsResult-LOSE { color:#ff6a5a; text-shadow:0 0 20px rgba(255,106,90,0.6); }
   #vsResultText.vsResult-DRAW { color:#9fd6ff; text-shadow:0 0 20px rgba(159,214,255,0.6); }
-  #vsResultDetail { font-size:16px; color:#ddd; margin-bottom:24px; }
+  #vsResultDetail { color:#ddd; margin-bottom:24px; }
+  /* 決着時の取得物資数は、数字ではなく📦アイコンを個数ぶん並べて大きく見せる(WIN/LOSEが直感的に分かるように) */
+  .vsResultResourceRow { display:flex; align-items:center; justify-content:center; gap:10px; margin:6px 0; min-height:1.4em; }
+  .vsResultResourceLabel { font-size:15px; width:80px; text-align:right; color:#bbb; }
+  .vsResultResourceIcons { font-size:32px; line-height:1; letter-spacing:2px; text-align:left; }
+  #vsResultBackBtn:disabled { opacity:0.35; cursor:default; }
   /* VS Modeでは操作説明を右下へ移動する(左上はプレイヤーの物資数表示に使うため) */
   body.vs-mode #ui { top:auto; left:auto; bottom:calc(20px + env(safe-area-inset-bottom)); right:calc(14px + env(safe-area-inset-right)); }
   #timer {
@@ -524,7 +529,7 @@
 <div id="difficulty">
   <img class="avatar" src="data:image/jpeg;base64,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" alt="やっさん">
   <div class="gametitle">ZAKUMIRO2</div>
-  <div class="title">難易度を選択</div>
+  <div class="title">モードを選択</div>
   <div id="diffButtons">
     <button type="button" class="diffbtn" id="diffBtn1">第一部</button>
     <button type="button" class="diffbtn" id="diffBtn2">第二部</button>
@@ -2857,9 +2862,13 @@ function showVsResult(result){
   const label = result === 'WIN' ? '勝利!' : result === 'LOSE' ? '敗北...' : '引き分け';
   vsResultTextEl.textContent = label;
   vsResultTextEl.className = 'vsResult-' + result;
-  vsResultDetailEl.textContent = '物資 プレイヤー ' + playerResourceCount + ' - ' + cpu.resourceCount + ' CPU';
+  // 取得物資数は数字ではなく、個数ぶんの📦アイコンを並べて大きく表示する(一目で差が分かるように)
+  vsResultDetailEl.innerHTML =
+    '<div class="vsResultResourceRow"><span class="vsResultResourceLabel">プレイヤー</span><span class="vsResultResourceIcons">' + '📦'.repeat(playerResourceCount) + '</span></div>' +
+    '<div class="vsResultResourceRow"><span class="vsResultResourceLabel">CPU</span><span class="vsResultResourceIcons">' + '📦'.repeat(cpu.resourceCount) + '</span></div>';
   vsResultEl.style.display = 'flex';
-  vsResultBackBtnEl.focus(); // キーボード操作で即座に戻れるよう、結果画面表示と同時に「戻る」ボタンへフォーカスする
+  // 決着直後の連打で誤って「戻る」を発動しないよう、しばらく無効化しておく(VS_RESULT_INPUT_LOCK_TIME経過後にメインループ側で解除・フォーカスする)
+  vsResultBackBtnEl.disabled = true;
 }
 function updateLifeBar(){
   lifeBarEl.innerHTML = '';
@@ -3159,6 +3168,7 @@ let vsMatchOver = false;     // 勝敗が決まり、結果画面を表示中か
 let vsJojoCooldown = 0;      // プレイヤーのジョジョ立ち連打防止タイマー(秒。VS Mode専用)
 const VS_JOJO_COOLDOWN_TIME = 1.0;
 let vsResultCameraTimer = 0; // 勝敗確定後のカメラ演出用タイマー(update(dt)は凍結で止まるため、メインループ側で独立して進める)
+const VS_RESULT_INPUT_LOCK_TIME = 5.0; // 決着直後、連打で「戻る」が誤発動しないよう入力を禁止する秒数(vsResultCameraTimerを共用する)
 
 // CPU(敵機)の状態。プレイヤー本体とは完全に独立した、簡易な物理・AIシステムを持つ
 const cpu = {
@@ -3200,7 +3210,7 @@ function updateCpuAppearance(){
 // ---- タイトル画面の自動プレイデモ ----
 // タイトル画面(難易度選択)で5秒間無操作が続くと、下手なAIによる自動プレイが始まる。Lv.1/Lv.2は起動のたびに交互。
 // ユーザーが何らかの操作をすると即座にキャンセルしてタイトル画面へ戻る。
-const TITLE_DEMO_IDLE = 5.0;
+const TITLE_DEMO_IDLE = 10.0; // 無操作でデモが始まるまでの秒数(以前の2倍に延長)
 const DEMO_GAMEOVER_AUTO_DELAY = 3.0; // デモ中のGAME OVER画面表示後、自動でタイトルへ戻るまでの追加待ち時間(秒)
 let titleIdleTimer = 0;
 let demoActive = false;
@@ -4027,7 +4037,7 @@ window.addEventListener('keydown', (e)=>{
   // VS Modeの結果画面表示中は、Backspaceキーでも「戻る」ボタンと同じ動作(難易度選択画面へ)にする
   // (フォーカスは既にボタンへ当ててあるためEnter/Spaceでも反応するが、Backspaceは別途ここで拾う必要がある)
   if (vsMode && vsMatchOver){
-    if (!e.repeat && e.key === 'Backspace'){ e.preventDefault(); resetGame(); }
+    if (!e.repeat && e.key === 'Backspace' && !vsResultBackBtnEl.disabled){ e.preventDefault(); resetGame(); }
     return;
   }
 
@@ -4267,8 +4277,8 @@ const resetBtnEl = document.getElementById('resetBtn');
 resetBtnEl.addEventListener('click', (e)=>{ e.stopPropagation(); ensureAudio(); resetGame(); });
 resetBtnEl.addEventListener('touchstart', (e)=>{ e.preventDefault(); e.stopPropagation(); ensureAudio(); resetGame(); }, { passive:false });
 // VS Mode結果画面の「戻る」ボタン(難易度選択画面へ)
-vsResultBackBtnEl.addEventListener('click', (e)=>{ e.stopPropagation(); resetGame(); });
-vsResultBackBtnEl.addEventListener('touchstart', (e)=>{ e.preventDefault(); e.stopPropagation(); resetGame(); }, { passive:false });
+vsResultBackBtnEl.addEventListener('click', (e)=>{ e.stopPropagation(); resetGame(); }); // disabled中はブラウザがclick自体を発生させない
+vsResultBackBtnEl.addEventListener('touchstart', (e)=>{ e.preventDefault(); e.stopPropagation(); if (vsResultBackBtnEl.disabled) return; resetGame(); }, { passive:false });
 
 // 一時停止(PCはESCキー、スマホ等タッチデバイスはリセットボタンの隣のPAUSEボタン)。
 // プレイ中(難易度選択画面・GAME OVER画面以外)にのみ切り替えられる
@@ -6016,10 +6026,15 @@ function startVsMatch(){
   const vsStartOffset = curGroundHalf*0.7; // 端に寄り過ぎないよう、半分の70%の位置にする
   pos.x = 0; pos.z = vsStartOffset; yaw = 0;              // プレイヤーは+Z側から、-Z方向(CPU側)を向いてスタート
   cpu.x = 0; cpu.z = -vsStartOffset; cpu.yaw = Math.PI;   // CPUは-Z側から、+Z方向(プレイヤー側)を向いてスタート
+  applyPose(); // 上記のpos/yawを自機の見た目(characterRootの位置・向き)へ即座に反映する。この直後に導入メッセージでpaused=trueになり、
+               // 通常は毎フレームapplyPose()を呼んでいるupdate(dt)がその間止まってしまうため、ここで明示的に一度呼んでおく必要がある
+  updateShadow(); // 影も同じ理由で、通常はpaused中は更新されないため、位置がずれたまま表示されないようここで一度反映しておく
   vsJojoCooldown = 0;
   vsResultCameraTimer = 0;
   cpuMesh.group.visible = true;
   cpuMesh.group.position.set(cpu.x, cpu.airY, cpu.z);
+  cpuMesh.group.rotation.y = cpu.yaw; // CPU側も同じ理由で、向きの反映(updateCpu内で通常行う処理)をここで先に行っておく
+  cpuShadowMesh.position.set(cpu.x, 0.03, cpu.z);
   cpuShadowMesh.visible = true;
   vsResultEl.style.display = 'none';
   vsPlayerResourceEl.style.display = 'flex';
@@ -6372,7 +6387,15 @@ function loop(now){
     updateVsMatchTimer(dt); // VS Modeの制限時間(100秒)判定
     // 勝敗確定後もカメラを動かし続けるための専用タイマー。update(dt)はisVsPlayerFrozen()で早期returnして進まなくなるため、
     // ボス撃破時の演出カメラ(victoryTimer)とは別に、ここで独立して進める
-    if (vsMode && vsMatchOver) vsResultCameraTimer += dt;
+    if (vsMode && vsMatchOver){
+      const wasLocked = vsResultCameraTimer < VS_RESULT_INPUT_LOCK_TIME;
+      vsResultCameraTimer += dt;
+      // 入力禁止時間(5秒)が経過した瞬間に「戻る」ボタンを有効化し、キーボード操作で即座に戻れるようフォーカスする
+      if (wasLocked && vsResultCameraTimer >= VS_RESULT_INPUT_LOCK_TIME){
+        vsResultBackBtnEl.disabled = false;
+        vsResultBackBtnEl.focus();
+      }
+    }
     if (!demoActive && !vsMode) digestRecordFrame(dt); // ハイライトダイジェスト用のリングバッファ記録(デモプレイ・VS Modeでは記録しない)
   }
   if (gameOver){
