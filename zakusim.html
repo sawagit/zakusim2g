@@ -81,6 +81,7 @@
   .vsResultResourceRow { display:flex; align-items:center; justify-content:center; gap:10px; margin:6px 0; min-height:1.4em; }
   .vsResultResourceLabel { font-size:15px; width:80px; text-align:right; color:#bbb; }
   .vsResultResourceIcons { font-size:32px; line-height:1; letter-spacing:2px; text-align:left; }
+  .vsResultRecordLine { font-size:13px; color:#999; margin-top:10px; }
   #vsResultBackBtn:disabled { opacity:0.35; cursor:default; }
   /* VS Modeでは操作説明を右下へ移動する(左上はプレイヤーの物資数表示に使うため) */
   body.vs-mode #ui { top:auto; left:auto; bottom:calc(20px + env(safe-area-inset-bottom)); right:calc(14px + env(safe-area-inset-right)); }
@@ -190,6 +191,7 @@
     #fullscreenBtn { display:block; } /* Fullscreen API非対応の端末ではJS側でさらに非表示にする */
     #trophyToast { font-size:10px; padding:5px 12px; white-space:nowrap; }
     #trophyToast .name { font-size:8px; white-space:nowrap; }
+    #vsAnnounceToast { font-size:10px; padding:5px 12px; white-space:nowrap; }
   }
   .diffbtn {
     font-family: -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
@@ -371,6 +373,15 @@
     max-width:88vw;
   }
   #trophyToast .name { display:block; font-size:15px; font-weight:normal; margin-top:3px; white-space:normal; }
+  /* VS Mode専用の告知トースト(「残り1個!」等)。トロフィートーストと同じ見た目を流用する */
+  #vsAnnounceToast {
+    display:none; position:fixed; top:190px; left:50%; transform:translateX(-50%); z-index:13;
+    font-family: -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+    font-size:19px; font-weight:bold; color:#2a1a00; text-align:center;
+    background:linear-gradient(180deg,#ffe27a,#ffb300); border:2px solid #7a4a00; border-radius:10px;
+    padding:10px 22px; box-shadow:0 4px 14px rgba(0,0,0,0.4); pointer-events:none;
+    max-width:88vw;
+  }
   #radarBox { position:fixed; top:92px; right:14px; z-index:10; pointer-events:none; }
   #radar { display:block; }
   #bossAppearBanner {
@@ -502,6 +513,7 @@
 <div id="tutorialHint"></div>
 <div id="theWorldCountdown"></div>
 <div id="trophyToast">👴🏾🏆 トロフィー獲得!<span class="name" id="trophyToastName"></span></div>
+<div id="vsAnnounceToast"></div>
 <div id="radarBox"><canvas id="radar" width="140" height="140"></canvas></div>
 <div id="bossAppearBanner">「見える。<br>私にも敵が見える」</div>
 <div id="congratsBanner">
@@ -2857,15 +2869,16 @@ function updateVsHud(){
     vsCpuLifeBarEl.appendChild(pip);
   }
 }
-// 勝敗結果画面を表示する(WIN/LOSE/DRAW)
-function showVsResult(result){
+// 勝敗結果画面を表示する(WIN/LOSE/DRAW)。recordは通算成績{win,lose,draw}
+function showVsResult(result, record){
   const label = result === 'WIN' ? '勝利!' : result === 'LOSE' ? '敗北...' : '引き分け';
   vsResultTextEl.textContent = label;
   vsResultTextEl.className = 'vsResult-' + result;
   // 取得物資数は数字ではなく、個数ぶんの📦アイコンを並べて大きく表示する(一目で差が分かるように)
   vsResultDetailEl.innerHTML =
     '<div class="vsResultResourceRow"><span class="vsResultResourceLabel">プレイヤー</span><span class="vsResultResourceIcons">' + '📦'.repeat(playerResourceCount) + '</span></div>' +
-    '<div class="vsResultResourceRow"><span class="vsResultResourceLabel">CPU</span><span class="vsResultResourceIcons">' + '📦'.repeat(cpu.resourceCount) + '</span></div>';
+    '<div class="vsResultResourceRow"><span class="vsResultResourceLabel">CPU</span><span class="vsResultResourceIcons">' + '📦'.repeat(cpu.resourceCount) + '</span></div>' +
+    '<div class="vsResultRecordLine">通算 ' + record.win + '勝' + record.lose + '敗</div>';
   vsResultEl.style.display = 'flex';
   // 決着直後の連打で誤って「戻る」を発動しないよう、しばらく無効化しておく(VS_RESULT_INPUT_LOCK_TIME経過後にメインループ側で解除・フォーカスする)
   vsResultBackBtnEl.disabled = true;
@@ -2895,6 +2908,23 @@ const goSubEl = document.getElementById('goSub');
 const theWorldBannerEl = document.getElementById('theWorldBanner');
 const theWorldCountdownEl = document.getElementById('theWorldCountdown');
 const trophyToastEl = document.getElementById('trophyToast');
+// VS Mode専用の告知トースト(トロフィーシステムとは別の、単純な表示だけの仕組み)
+const vsAnnounceToastEl = document.getElementById('vsAnnounceToast');
+const VS_ANNOUNCE_TOAST_TIME = 3.5; // トロフィートーストと同じ表示時間
+let vsAnnounceToastTimer = -1;
+function showVsAnnounceToast(text){
+  vsAnnounceToastEl.textContent = text;
+  vsAnnounceToastEl.style.display = 'block';
+  vsAnnounceToastTimer = 0;
+}
+function updateVsAnnounceToast(dt){
+  if (vsAnnounceToastTimer < 0) return;
+  vsAnnounceToastTimer += dt;
+  if (vsAnnounceToastTimer >= VS_ANNOUNCE_TOAST_TIME){
+    vsAnnounceToastEl.style.display = 'none';
+    vsAnnounceToastTimer = -1;
+  }
+}
 const trophyToastNameEl = document.getElementById('trophyToastName');
 const goTrophiesEl = document.getElementById('goTrophies');
 const goDigestReplayBtnEl = document.getElementById('goDigestReplayBtn');
@@ -3067,6 +3097,25 @@ function saveVsModeUnlocked(){
   try{ localStorage.setItem(VS_MODE_UNLOCK_KEY, '1'); }catch(e){}
 }
 let vsModeUnlocked = loadVsModeUnlocked();
+// ---- VS Modeの対戦成績。CPUの難易度調整(前回敗北時・初対戦時は易しくする)と、決着画面の通算成績表示に使う ----
+const VS_LAST_RESULT_KEY = 'zakusim_vs_last_result'; // 前回の結果('WIN'/'LOSE'/'DRAW')。nullなら初対戦
+function loadVsLastResult(){
+  try{ return localStorage.getItem(VS_LAST_RESULT_KEY); }catch(e){ return null; }
+}
+function saveVsLastResult(result){
+  try{ localStorage.setItem(VS_LAST_RESULT_KEY, result); }catch(e){}
+}
+const VS_RECORD_KEY = 'zakusim_vs_record'; // 通算成績{win,lose,draw}。決着画面に「n勝m敗」を表示するために使う
+function loadVsRecord(){
+  try{
+    const r = JSON.parse(localStorage.getItem(VS_RECORD_KEY));
+    if (r && typeof r.win === 'number' && typeof r.lose === 'number' && typeof r.draw === 'number') return r;
+  }catch(e){}
+  return { win:0, lose:0, draw:0 };
+}
+function saveVsRecord(record){
+  try{ localStorage.setItem(VS_RECORD_KEY, JSON.stringify(record)); }catch(e){}
+}
 function unlockVsMode(){
   if (vsModeUnlocked) return;
   vsModeUnlocked = true;
@@ -3169,6 +3218,12 @@ let vsJojoCooldown = 0;      // プレイヤーのジョジョ立ち連打防止
 const VS_JOJO_COOLDOWN_TIME = 1.0;
 let vsResultCameraTimer = 0; // 勝敗確定後のカメラ演出用タイマー(update(dt)は凍結で止まるため、メインループ側で独立して進める)
 const VS_RESULT_INPUT_LOCK_TIME = 5.0; // 決着直後、連打で「戻る」が誤発動しないよう入力を禁止する秒数(vsResultCameraTimerを共用する)
+// CPUの難易度調整。初対戦時、または前回敗北(引き分け含む)時はCPUを弱くする。前回勝利していた場合のみ制限なし(通常仕様)
+let vsEasyMode = false;
+const VS_EASY_FORM2_SPEED_MULT = 1.5; // 易しいモード中、CPUのフォーム2速度倍率(通常はFORM2_SPEED_MULT=3)
+const VS_EASY_ACTION_UNLOCK_COUNT = 2; // 易しいモード中、CPUがザ・世界/ジョジョ立ちを使い始めるのに必要な「プレイヤー自身の使用回数」
+let playerVsJojoCount = 0;  // 今回のVS試合でプレイヤーがジョジョ立ちを発動した回数
+let playerVsWorldCount = 0; // 今回のVS試合でプレイヤーがザ・世界を発動した回数
 
 // CPU(敵機)の状態。プレイヤー本体とは完全に独立した、簡易な物理・AIシステムを持つ
 const cpu = {
@@ -3859,7 +3914,10 @@ function resetGame(){
   tutorialIntroTimer = 0;
 
   camYaw = yaw; moveRefYaw = yaw; // カメラ・移動基準角とも機体の正面へ即座に合わせ直す(遅れ追従の演出はプレイ中だけのものなので、リセット時は前回の名残りを引きずらない)
-  camPitch = 16.0*D2R; camDist = 75; // カメラのピッチ・ズームも初期値へ戻す(デモ中のズーム往復などの名残りを引きずらないようにする)
+  camPitch = 16.0*D2R;
+  // カメラのズームも初期値へ戻す(デモ中のズーム往復などの名残りを引きずらないようにする)。
+  // スマホ等を縦向きで持っている間は画面が縦長で視野が狭くなるため、初期ズームを最大広角側(150m)にする
+  camDist = (window.matchMedia('(pointer:coarse) and (orientation:portrait)').matches) ? 150 : 75;
   applyPose();
   updateCamera(0);
 }
@@ -3919,7 +3977,7 @@ function pressJojo(){
   if (state!=='normal' && state!=='jojo' && state!=='air') return;
   // 操作受付禁止時間(JOJO_INPUT_LOCK_TIME)中は無反応。それ以降はポーズ中でも再発動(やり直し)できる
   if (state==='jojo' && jojoTimer < JOJO_INPUT_LOCK_TIME) return;
-  if (vsMode) vsJojoCooldown = VS_JOJO_COOLDOWN_TIME;
+  if (vsMode){ vsJojoCooldown = VS_JOJO_COOLDOWN_TIME; playerVsJojoCount++; } // 後者はCPUの難易度調整(易しいモード解除)に使う
   const restarting = (state==='jojo');
   poseSlideSpeed = currentSpeed; // 発動時点の速度(地上発動時、この速度からなめらかに減速しながら進む)
   state = 'jojo';
@@ -4457,6 +4515,46 @@ function gpPressDir(dir){
   if (dir) dir.keys.forEach(pressMoveKey);
 }
 
+// ---- PCコントローラーでのメニューボタン操作(スティック/十字キーでフォーカス移動、Aボタンで決定) ----
+// 画面ごとに「今フォーカス移動・A決定の対象にするボタン一覧」を、表示中のものだけDOM順で返す
+function gpNavButtons(){
+  if (awaitingDifficulty && !rankingOverlayOpen){
+    return [
+      document.getElementById('diffBtn1'),
+      document.getElementById('diffBtn2'),
+      part3Unlocked ? document.getElementById('diffBtn3') : null,
+      vsModeUnlocked ? document.getElementById('diffBtnVs') : null
+    ].filter(Boolean);
+  }
+  if (vsMode && vsMatchOver && !vsResultBackBtnEl.disabled){
+    return [vsResultBackBtnEl]; // 決着直後5秒間の入力禁止中は候補なし(Aボタンでも反応させない)
+  }
+  return [];
+}
+// 一覧内でフォーカスを1つ進める/戻す(dirは+1か-1)。フォーカスが一覧の外にある場合は先頭に合わせる
+function gpMoveFocus(dir){
+  const btns = gpNavButtons();
+  if (btns.length === 0) return;
+  const idx = btns.indexOf(document.activeElement);
+  const next = (idx < 0) ? 0 : (idx + dir + btns.length) % btns.length;
+  btns[next].focus();
+}
+// 現在フォーカスされているボタン(一覧の外なら先頭)をAボタンで決定(クリック)する
+function gpConfirmFocused(){
+  const btns = gpNavButtons();
+  if (btns.length === 0) return;
+  const el = btns.includes(document.activeElement) ? document.activeElement : btns[0];
+  el.click();
+}
+// メニュー画面でスティックを倒した瞬間だけ1回反応させる(中央に戻るまで再入力しない。押しっぱなしで連続移動しないようにする)
+let gpMenuStickArmed = true;
+function gpMenuStickStep(lx, ly){
+  if (Math.hypot(lx, ly) < GP_DEADZONE){ gpMenuStickArmed = true; return 0; }
+  if (!gpMenuStickArmed) return 0;
+  gpMenuStickArmed = false;
+  return (Math.abs(lx) >= Math.abs(ly)) ? (lx > 0 ? 1 : -1) : (ly > 0 ? 1 : -1); // 右/下=次へ、左/上=前へ
+}
+
 // このページがiframe等に埋め込まれ、Permissions Policyでgamepad機能自体を禁止されている環境では
 // navigator.getGamepads()の呼び出し自体が例外を投げる(コントローラーの機種・接続方法とは無関係)。
 // 一度でも検出されたら以後は二度と呼び出さず、静かに機能を無効化する(毎フレーム例外を出し続けない)
@@ -4504,9 +4602,18 @@ function updateGamepadInner(dt){
 
   if (awaitingDifficulty){
     if (rankingOverlayOpen) return;
-    if (pressedNow(0)) startGame(1, false);
-    else if (pressedNow(1)) startGame(2, false);
-    else if (pressedNow(2) && part3Unlocked) startGame(3, false);
+    // モード選択ボタンはスティック(または十字キー)でフォーカス移動、Aボタンで決定する
+    const dlx = gp.axes[0] || 0, dly = gp.axes[1] || 0;
+    const stickStep = gpMenuStickStep(dlx, dly);
+    if (pressedNow(14) || stickStep < 0) gpMoveFocus(-1); // 十字キー左、またはスティック左/上
+    else if (pressedNow(15) || stickStep > 0) gpMoveFocus(1); // 十字キー右、またはスティック右/下
+    if (pressedNow(0)) gpConfirmFocused();
+    return;
+  }
+
+  // VS Modeの結果画面: 「戻る」ボタンをAボタンで決定する(入力禁止中はgpNavButtonsが空を返すため反応しない)
+  if (vsMode && vsMatchOver){
+    if (pressedNow(0)) gpConfirmFocused();
     return;
   }
 
@@ -5339,6 +5446,34 @@ function updateRadar(){
     }
   }
 
+  // VS ModeのCPU(検知範囲内なら実位置に赤い点、範囲外でも円周上に矢印でおおよその方向を示す。ラスボスと同じ表示方式)
+  if (vsMode){
+    const cdx = cpu.x - pos.x, cdz = cpu.z - pos.z;
+    const cdist = Math.hypot(cdx, cdz);
+    radarCtx.fillStyle = '#ff4d4d';
+    if (cdist <= curRadarRange){
+      radarCtx.beginPath();
+      radarCtx.arc(cdx*scale, cdz*scale, 4.5, 0, Math.PI*2);
+      radarCtx.fill();
+      radarCtx.strokeStyle = 'rgba(255,255,255,0.85)';
+      radarCtx.lineWidth = 1;
+      radarCtx.stroke();
+    } else if (cdist > 0.01){
+      const ux = cdx/cdist, uz = cdz/cdist;
+      const angle = Math.atan2(ux, -uz);
+      radarCtx.save();
+      radarCtx.translate(ux*(r-9), uz*(r-9));
+      radarCtx.rotate(angle);
+      radarCtx.beginPath();
+      radarCtx.moveTo(0, -8);
+      radarCtx.lineTo(5, 5);
+      radarCtx.lineTo(-5, 5);
+      radarCtx.closePath();
+      radarCtx.fill();
+      radarCtx.restore();
+    }
+  }
+
   // プレイヤー(中心の三角形。ワールドの向いている方向を指す。ヘディングアップ時は常に真上を指す)
   radarCtx.save();
   radarCtx.rotate(-yaw);
@@ -5494,6 +5629,8 @@ function invertWorldColors(active){
 }
 
 function currentTheWorldDuration(){
+  // VS Modeはフォームによらず双方5秒固定にする(指示通り。THE_WORLD_FREEZE_TIMEと同じ値のためそのまま返す)
+  if (vsMode) return THE_WORLD_FREEZE_TIME;
   // ラスボスがフェーズ2(1回目のタッチ後)の間は最優先で20秒になる
   if (bossActive && bossPhase === 2) return THE_WORLD_FREEZE_TIME_BOSS;
   // フォーム2中(発動時だけでなく発動中にフォーム2へ変身した場合も)は継続時間が伸びる
@@ -5510,6 +5647,7 @@ function activateTheWorld(){
   theWorldCountdownEl.style.display = 'block';
   invertWorldColors(true);
   if (!vsMode) awardTrophy('first_world'); // VS Modeはトロフィーと非連動の独立モードのため
+  else playerVsWorldCount++; // CPUの難易度調整(易しいモード解除)に使う
   playBishiSound(); // ジョジョ立ちと同じ「ビシッ」という音を鳴らす
   stopBGM();
 }
@@ -6009,6 +6147,10 @@ function startVsMatch(){
   vsRemainingBlocks = qblockTotalCount; // placeQBlocks()で確定した実際の配置数(VS_TOTAL_BLOCKSと一致するはず)
   vsMatchTimer = 0;
   vsMatchOver = false;
+  // 前回勝利していた場合のみ制限なし。初対戦(記録なし)・前回敗北・前回引き分けはCPUを弱くする
+  vsEasyMode = loadVsLastResult() !== 'WIN';
+  playerVsJojoCount = 0;
+  playerVsWorldCount = 0;
   playerLife = PLAYER_MAX_LIFE;
   updateLifeBar();
   cpu.hp = PLAYER_MAX_LIFE;
@@ -6031,6 +6173,8 @@ function startVsMatch(){
   updateShadow(); // 影も同じ理由で、通常はpaused中は更新されないため、位置がずれたまま表示されないようここで一度反映しておく
   vsJojoCooldown = 0;
   vsResultCameraTimer = 0;
+  vsAnnounceToastEl.style.display = 'none';
+  vsAnnounceToastTimer = -1;
   cpuMesh.group.visible = true;
   cpuMesh.group.position.set(cpu.x, cpu.airY, cpu.z);
   cpuMesh.group.rotation.y = cpu.yaw; // CPU側も同じ理由で、向きの反映(updateCpu内で通常行う処理)をここで先に行っておく
@@ -6048,6 +6192,7 @@ function collectVsBlock(who){
   vsRemainingBlocks--;
   if (who === 'player') playerResourceCount++; else cpu.resourceCount++;
   updateVsHud();
+  if (vsRemainingBlocks === 1) showVsAnnounceToast('📦 残り1個!'); // 取得した側に関わらず、残数がちょうど1個になった瞬間に知らせる
   checkVsMatchEnd();
 }
 // ジョジョ立ちで相手にヒットしたとき、所持している物資を1つ奪う(ダメージが無効化された場合でも成立する)
@@ -6168,6 +6313,8 @@ function findNearestFlyingHaro(fromX, fromZ){
 }
 
 // CPUの毎フレーム処理。移動(物資へ直進)・ジョジョ立ち判定・ザ・世界の発動と経過・盤外復帰をまとめて行う
+// 易しいモード中は、CPUのフォーム2速度倍率を通常(FORM2_SPEED_MULT=3)より弱めた値にする
+function cpuForm2SpeedMult(){ return vsEasyMode ? VS_EASY_FORM2_SPEED_MULT : FORM2_SPEED_MULT; }
 function updateCpu(dt){
   if (!vsMode || vsMatchOver) return;
 
@@ -6190,15 +6337,16 @@ function updateCpu(dt){
   }
   if (cpu.worldActive){
     cpu.worldTimer += dt;
-    const duration = cpu.form === 2 ? THE_WORLD_FREEZE_TIME_FORM2 : THE_WORLD_FREEZE_TIME;
-    if (cpu.worldTimer >= duration){
+    // VS Modeのザ・世界はフォームによらず双方5秒固定(THE_WORLD_FREEZE_TIME)にする(指示通り)
+    if (cpu.worldTimer >= THE_WORLD_FREEZE_TIME){
       cpu.worldActive = false;
       if (!theWorldActive){ invertWorldColors(false); theWorldBannerEl.style.display = 'none'; startBGM(); } // プレイヤー側も未発動なら演出を戻す
     }
   }
   if (cpu.worldCharged && cpu.worldEngageTimer >= 0){
     cpu.worldEngageTimer -= dt;
-    if (cpu.worldEngageTimer <= 0) activateCpuWorld();
+    // 易しいモード中は、プレイヤー自身がザ・世界をVS_EASY_ACTION_UNLOCK_COUNT回使うまでCPUは発動を控える(発動タイミングはそのまま待機させる)
+    if (cpu.worldEngageTimer <= 0 && (!vsEasyMode || playerVsWorldCount >= VS_EASY_ACTION_UNLOCK_COUNT)) activateCpuWorld();
   }
 
   // 簡易な垂直ジャンプ物理(プレイヤーのupdateAirPhysicsと同じ重力定数JUMP_GRAVITYを流用する)。
@@ -6222,8 +6370,9 @@ function updateCpu(dt){
       const hdx = chasedHaro.x-cpu.x, hdz = chasedHaro.z-cpu.z;
       const hdist = Math.hypot(hdx, hdz);
       if (hdist > 0.5){
-        cpu.yaw = Math.atan2(-hdx, -hdz);
-        const speed = RUN_SPEED*(cpu.form === 2 ? FORM2_SPEED_MULT : 1);
+        // 向きはプレイヤーと同じ旋回の緩さ(YAW_SNAP_T)でなめらかに追いつかせる(即座に振り向けると不公平なため)
+        cpu.yaw = convergeAngle(cpu.yaw, Math.atan2(-hdx, -hdz), dt, YAW_SNAP_T);
+        const speed = RUN_SPEED*(cpu.form === 2 ? cpuForm2SpeedMult() : 1);
         const step = Math.min(hdist, speed*dt);
         cpu.x += (hdx/hdist)*step;
         cpu.z += (hdz/hdist)*step;
@@ -6240,8 +6389,9 @@ function updateCpu(dt){
         const dx = target.x-cpu.x, dz = target.z-cpu.z;
         const dist = Math.hypot(dx, dz);
         if (dist > 0.5){
-          cpu.yaw = Math.atan2(-dx, -dz); // プレイヤーの移動積分式(-sin,-cos)と同じ規約に合わせる
-          const speed = RUN_SPEED*(cpu.form === 2 ? FORM2_SPEED_MULT : 1);
+          // 向きはプレイヤーと同じ旋回の緩さ(YAW_SNAP_T)でなめらかに追いつかせる(即座に振り向けると不公平なため)
+          cpu.yaw = convergeAngle(cpu.yaw, Math.atan2(-dx, -dz), dt, YAW_SNAP_T);
+          const speed = RUN_SPEED*(cpu.form === 2 ? cpuForm2SpeedMult() : 1);
           const step = Math.min(dist, speed*dt);
           cpu.x += (dx/dist)*step;
           cpu.z += (dz/dist)*step;
@@ -6287,7 +6437,8 @@ function updateCpu(dt){
     if (distToPlayer <= range){
       if (cpu.jojoEngageTimer < 0) cpu.jojoEngageTimer = VS_CPU_JOJO_ENGAGE_MIN + Math.random()*(VS_CPU_JOJO_ENGAGE_MAX-VS_CPU_JOJO_ENGAGE_MIN);
       cpu.jojoEngageTimer -= dt;
-      if (cpu.jojoEngageTimer <= 0) triggerCpuJojo();
+      // 易しいモード中は、プレイヤー自身がジョジョ立ちをVS_EASY_ACTION_UNLOCK_COUNT回使うまでCPUは発動を控える
+      if (cpu.jojoEngageTimer <= 0 && (!vsEasyMode || playerVsJojoCount >= VS_EASY_ACTION_UNLOCK_COUNT)) triggerCpuJojo();
     } else {
       cpu.jojoEngageTimer = -1; // 範囲外に出たら不発でリセットする
     }
@@ -6334,7 +6485,13 @@ function resolveVsMatch(){
   if (playerResourceCount > cpu.resourceCount) resultText = 'WIN';
   else if (playerResourceCount < cpu.resourceCount) resultText = 'LOSE';
   else resultText = 'DRAW';
-  showVsResult(resultText);
+  saveVsLastResult(resultText); // 次回のCPU難易度調整に使う
+  const record = loadVsRecord();
+  if (resultText === 'WIN') record.win++;
+  else if (resultText === 'LOSE') record.lose++;
+  else record.draw++;
+  saveVsRecord(record);
+  showVsResult(resultText, record);
 }
 
 function loop(now){
@@ -6412,6 +6569,7 @@ function loop(now){
     updateJojoDome(dt);
     updateSkullBlast(dt);
     updateTrophyToast(dt);
+    updateVsAnnounceToast(dt);
     updateBossAppearBanner(dt);
     updateBossFlash(dt);
     updateShadow();
