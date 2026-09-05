@@ -3220,7 +3220,7 @@ let vsResultCameraTimer = 0; // 勝敗確定後のカメラ演出用タイマー
 const VS_RESULT_INPUT_LOCK_TIME = 5.0; // 決着直後、連打で「戻る」が誤発動しないよう入力を禁止する秒数(vsResultCameraTimerを共用する)
 // CPUの難易度調整。初対戦時、または前回敗北(引き分け含む)時はCPUを弱くする。前回勝利していた場合のみ制限なし(通常仕様)
 let vsEasyMode = false;
-const VS_EASY_FORM2_SPEED_MULT = 1.5; // 易しいモード中、CPUのフォーム2速度倍率(通常はFORM2_SPEED_MULT=3)
+const VS_EASY_FORM2_SPEED_MULT = 2; // 易しいモード中、CPUのフォーム2速度倍率(通常はFORM2_SPEED_MULT=3)
 const VS_EASY_ACTION_UNLOCK_COUNT = 2; // 易しいモード中、CPUがザ・世界/ジョジョ立ちを使い始めるのに必要な「プレイヤー自身の使用回数」
 let playerVsJojoCount = 0;  // 今回のVS試合でプレイヤーがジョジョ立ちを発動した回数
 let playerVsWorldCount = 0; // 今回のVS試合でプレイヤーがザ・世界を発動した回数
