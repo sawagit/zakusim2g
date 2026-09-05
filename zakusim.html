@@ -48,6 +48,12 @@
     font-size:11px; color:#ffe0da; text-shadow:0 0 6px rgba(0,0,0,0.8), 0 0 2px rgba(0,0,0,0.9);
   }
   .vsLifeBar { display:flex; gap:4px; background:rgba(255,255,255,0.78); border:1px solid #ccc; border-radius:6px; padding:7px 10px; }
+  /* ジョジョ立ちで物資を奪った瞬間に、奪われた側→奪った側のアイコンへ飛んでいく演出用(JSがleft/topを書き換えてtransitionで動かす) */
+  .vsFlyIcon {
+    position:fixed; z-index:25; pointer-events:none; font-size:22px;
+    transform:translate(-50%,-50%);
+    transition:left 0.45s ease-in, top 0.45s ease-in, opacity 0.45s ease-in;
+  }
   /* ---- VS Mode結果画面 ---- */
   #vsResult {
     display:none; position:fixed; left:0; top:0; width:100%; height:100%; z-index:22;
@@ -160,11 +166,12 @@
   #difficulty .opt b { color:#ffcc33; }
 
   /* ---- タッチ操作UI(スマホ等ポインタ精度が粗いデバイスのみ表示) ---- */
-  #diffButtons, #diffButtonsRow1, #stick8, #actionButtons, #pauseBtn, #fullscreenBtn { display:none; }
+  #stick8, #actionButtons, #pauseBtn, #fullscreenBtn { display:none; }
+  /* 難易度選択ボタンはPC・スマホ両方に表示する(PCはマウスクリック、スマホはタップで開始できる) */
+  #diffButtons, #diffButtonsRow1 { display:flex; gap:14px; margin-top:4px; justify-content:center; }
   @media (pointer:coarse){
     #ui { display:none; }
     #difficulty .opt { display:none; } /* PC用のキー操作ヒントはスマホでは非表示にしてすっきりさせる */
-    #diffButtons, #diffButtonsRow1 { display:flex; gap:14px; margin-top:4px; justify-content:center; }
     #stick8 { display:block; }
     #actionButtons { display:flex; }
     #pauseBtn { display:block; } /* PCはESCキーでポーズできるため、ボタンはスマホ等タッチデバイスのみ表示する */
@@ -178,7 +185,7 @@
     background:linear-gradient(180deg, rgba(77,200,255,0.25), rgba(15,25,35,0.55));
     border:2px solid rgba(125,220,255,0.65); box-shadow:0 0 14px rgba(77,200,255,0.25);
     border-radius:10px; padding:clamp(10px,3vw,14px) clamp(16px,4.5vw,22px);
-    touch-action:none; -webkit-tap-highlight-color:transparent;
+    touch-action:none; -webkit-tap-highlight-color:transparent; cursor:pointer;
   }
   .diffbtn:active { background:rgba(77,200,255,0.4); }
   /* 第三部は隠しモードらしく、専用のボディ色(#973CFA)に寄せた紫系の配色にする */
@@ -2761,10 +2768,30 @@ const vsPlayerResourceEl = document.getElementById('vsPlayerResource');
 const vsPlayerCountEl = document.getElementById('vsPlayerCount');
 const vsCpuPanelEl = document.getElementById('vsCpuPanel');
 const vsCpuLifeBarEl = document.getElementById('vsCpuLifeBar');
+const vsCpuResourceEl = document.getElementById('vsCpuResource');
 const vsCpuCountEl = document.getElementById('vsCpuCount');
 const vsResultEl = document.getElementById('vsResult');
 const vsResultTextEl = document.getElementById('vsResultText');
 const vsResultDetailEl = document.getElementById('vsResultDetail');
+const vsResultBackBtnEl = document.getElementById('vsResultBackBtn');
+// ジョジョ立ちで物資を奪った瞬間、奪われた側のアイコンから奪った側のアイコンへ📦が飛んでいく簡易演出。
+// 要素を毎回1個生成し、CSSのtransitionでleft/topを目的地へ動かした後、アニメーション終了を待って取り除く
+function flyResourceIcon(fromEl, toEl){
+  const fromRect = fromEl.getBoundingClientRect();
+  const toRect = toEl.getBoundingClientRect();
+  const icon = document.createElement('div');
+  icon.className = 'vsFlyIcon';
+  icon.textContent = '📦';
+  icon.style.left = (fromRect.left + fromRect.width/2) + 'px';
+  icon.style.top = (fromRect.top + fromRect.height/2) + 'px';
+  document.body.appendChild(icon);
+  requestAnimationFrame(() => { // 1フレーム後に目的地の座標へ変更し、transitionで飛ばす
+    icon.style.left = (toRect.left + toRect.width/2) + 'px';
+    icon.style.top = (toRect.top + toRect.height/2) + 'px';
+    icon.style.opacity = '0.15';
+  });
+  setTimeout(() => icon.remove(), 500);
+}
 // プレイヤー・CPUの物資数表示とCPUの体力バーをまとめて更新する
 function updateVsHud(){
   vsPlayerCountEl.textContent = playerResourceCount;
@@ -2783,6 +2810,7 @@ function showVsResult(result){
   vsResultTextEl.className = 'vsResult-' + result;
   vsResultDetailEl.textContent = '物資 プレイヤー ' + playerResourceCount + ' - ' + cpu.resourceCount + ' CPU';
   vsResultEl.style.display = 'flex';
+  vsResultBackBtnEl.focus(); // キーボード操作で即座に戻れるよう、結果画面表示と同時に「戻る」ボタンへフォーカスする
 }
 function updateLifeBar(){
   lifeBarEl.innerHTML = '';
@@ -3080,6 +3108,9 @@ let playerResourceCount = 0; // VS Mode中のプレイヤーの物資所持数
 let vsRemainingBlocks = 0;   // フィールドにまだ残っている(どちらも取っていない)物資の数
 let vsMatchTimer = 0;
 let vsMatchOver = false;     // 勝敗が決まり、結果画面を表示中かどうか
+let vsJojoCooldown = 0;      // プレイヤーのジョジョ立ち連打防止タイマー(秒。VS Mode専用)
+const VS_JOJO_COOLDOWN_TIME = 1.0;
+let vsResultCameraTimer = 0; // 勝敗確定後のカメラ演出用タイマー(update(dt)は凍結で止まるため、メインループ側で独立して進める)
 
 // CPU(敵機)の状態。プレイヤー本体とは完全に独立した、簡易な物理・AIシステムを持つ
 const cpu = {
@@ -3093,6 +3124,8 @@ const cpu = {
   jojoActive: false, jojoTimer: 0,     // ジョジョ立ちの決めポーズ中(この間は移動しない)
   jojoEngageTimer: -1,   // プレイヤーが射程に入ってからジョジョ立ち発動までのカウントダウン(-1は未計測)
   targetBlock: null,     // 現在向かっている物資ブロック
+  // 物資ブロック取得用の簡易ジャンプ物理(プレイヤーのairY/vyと同じ重力定数JUMP_GRAVITYを流用する)
+  airY: 0, vy: 0, jumpsUsed: 0, jumpForHighBlock: false, // jumpForHighBlock: 今のジャンプが高所ブロック用(2段ジャンプが必要)かどうか
   // 見た目のアニメーションは敵ザク用のupdateZakuWalkAnim()をそのまま流用する(mesh/walkPhase/chargeSpeedは同関数が要求する形)
   mesh: null, walkPhase: 0, chargeSpeed: 0
 };
@@ -3815,10 +3848,14 @@ function performMultiJump(){
 
 function pressJojo(){
   if (vsMatchFrozen()) return;
+  // VS Mode専用: ジョジョ立ちの連打(=再発動での連続ヒット)を防ぐため、発動から1秒間は再発動できない。
+  // ジョジョ立ち以外の操作(移動・ジャンプ・鉄山靠)には一切影響しない
+  if (vsMode && vsJojoCooldown > 0) return;
   // 地上(normal)・ジャンプ中(air)・ジョジョ立ち中(再発動)のいずれかから発動できる
   if (state!=='normal' && state!=='jojo' && state!=='air') return;
   // 操作受付禁止時間(JOJO_INPUT_LOCK_TIME)中は無反応。それ以降はポーズ中でも再発動(やり直し)できる
   if (state==='jojo' && jojoTimer < JOJO_INPUT_LOCK_TIME) return;
+  if (vsMode) vsJojoCooldown = VS_JOJO_COOLDOWN_TIME;
   const restarting = (state==='jojo');
   poseSlideSpeed = currentSpeed; // 発動時点の速度(地上発動時、この速度からなめらかに減速しながら進む)
   state = 'jojo';
@@ -3932,6 +3969,13 @@ window.addEventListener('keydown', (e)=>{
   if (demoActive){ if (!e.repeat) cancelDemo(); return; } // デモ中は何かキーを押したら即座にタイトルへ戻す
 
   if (digestPlaybackActive){ if (!e.repeat) finishDigestPlayback(); return; } // ハイライトダイジェスト再生中は何かキーを押したらスキップする
+
+  // VS Modeの結果画面表示中は、Backspaceキーでも「戻る」ボタンと同じ動作(難易度選択画面へ)にする
+  // (フォーカスは既にボタンへ当ててあるためEnter/Spaceでも反応するが、Backspaceは別途ここで拾う必要がある)
+  if (vsMode && vsMatchOver){
+    if (!e.repeat && e.key === 'Backspace'){ e.preventDefault(); resetGame(); }
+    return;
+  }
 
   if (awaitingDifficulty){
     if (rankingOverlayOpen) return; // ランキング表示中はゲーム開始キーを無視する
@@ -4114,12 +4158,22 @@ function wireDiffButton(id, diff){
   }
   el.addEventListener('touchend', release);
   el.addEventListener('touchcancel', release);
+  // PC(マウス操作)でも同じボタンをクリックで使えるようにする。押しっぱなし3秒判定もタッチ版と同じくmousedown/upで計測する
+  el.addEventListener('mousedown', (e)=>{
+    ensureAudio();
+    if (!awaitingDifficulty) return;
+    downAt = performance.now();
+    diffPressActive = true;
+  });
+  el.addEventListener('mouseup', release);
+  el.addEventListener('mouseleave', ()=>{ if (downAt) release(); }); // ボタン外までドラッグしてから離した場合もそこで確定させる
 }
 wireDiffButton('diffBtn1', 1);
 wireDiffButton('diffBtn2', 2);
 wireDiffButton('diffBtn3', 3);
-// VS Modeボタンは無敵モードの長押し判定を持たない、単純なタップ開始にする
+// VS Modeボタンは無敵モードの長押し判定を持たない、単純なタップ/クリックで開始する
 document.getElementById('diffBtnVs').addEventListener('touchstart', (e)=>{ e.preventDefault(); ensureAudio(); if (awaitingDifficulty) startVsModeGame(); }, { passive:false });
+document.getElementById('diffBtnVs').addEventListener('click', (e)=>{ ensureAudio(); if (awaitingDifficulty) startVsModeGame(); });
 
 // 難易度選択画面をチェックボックス操作等でいじっている間は、自動デモの開始タイマーをリセットしておく
 difficultyEl.addEventListener('touchstart', ()=>{ titleIdleTimer = 0; }, { passive:true });
@@ -4159,8 +4213,8 @@ const resetBtnEl = document.getElementById('resetBtn');
 resetBtnEl.addEventListener('click', (e)=>{ e.stopPropagation(); ensureAudio(); resetGame(); });
 resetBtnEl.addEventListener('touchstart', (e)=>{ e.preventDefault(); e.stopPropagation(); ensureAudio(); resetGame(); }, { passive:false });
 // VS Mode結果画面の「戻る」ボタン(難易度選択画面へ)
-document.getElementById('vsResultBackBtn').addEventListener('click', (e)=>{ e.stopPropagation(); resetGame(); });
-document.getElementById('vsResultBackBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); e.stopPropagation(); resetGame(); }, { passive:false });
+vsResultBackBtnEl.addEventListener('click', (e)=>{ e.stopPropagation(); resetGame(); });
+vsResultBackBtnEl.addEventListener('touchstart', (e)=>{ e.preventDefault(); e.stopPropagation(); resetGame(); }, { passive:false });
 
 // 一時停止(PCはESCキー、スマホ等タッチデバイスはリセットボタンの隣のPAUSEボタン)。
 // プレイ中(難易度選択画面・GAME OVER画面以外)にのみ切り替えられる
@@ -4428,11 +4482,13 @@ function updateGamepadInner(dt){
 }
 
 function updateCamera(dt){
-  if (state === 'victory'){
+  // VS Modeで勝敗が確定した後も、ボス撃破時と同じ演出カメラを流用する(プレイヤー・CPUとも完全に停止した状態で、
+  // カメラだけがゆっくり旋回・ズームインし続ける。専用のvsResultCameraTimerを使う点のみボス撃破時と異なる)
+  if (state === 'victory' || (vsMode && vsMatchOver)){
     // ラスボス撃破演出用のカメラワーク: ゆっくり旋回しながらじわじわズームインする(camYaw等は変更せず、通常状態に戻った際に元の視点を保つ)
     // ラスボスを空中(多段ジャンプ中)で撃破した場合、撃破の瞬間の高さ(airY)のまま静止するため、
     // 注視点もそのままの高さに追従させ、キャラクターが画面から見切れないようにする
-    const t = victoryTimer;
+    const t = (vsMode && vsMatchOver) ? vsResultCameraTimer : victoryTimer;
     const vYaw = yaw + t*0.9;
     const vPitch = 0.3 + Math.sin(t*0.6)*0.12;
     const vDist = Math.max(18, 55 - t*4.5);
@@ -4662,6 +4718,7 @@ function isVsPlayerFrozen(){
   return vsMode && (vsMatchOver || (cpu.worldActive && !theWorldActive));
 }
 function update(dt){
+  if (vsJojoCooldown > 0) vsJojoCooldown -= dt; // VS Modeのジョジョ立ち連打防止タイマー(凍結中でも減らしておく)
   if (isVsPlayerFrozen()) return; // ザ・世界の発動操作(pressTetsuzanko)自体はこの関数を経由しない別の入力関数のため、凍結中でも常に受け付けられる
 
   if (inAir) updateAirPhysics(dt);
@@ -5886,9 +5943,15 @@ function startVsMatch(){
   cpu.jojoActive = false; cpu.jojoTimer = 0; cpu.jojoEngageTimer = -1;
   cpu.targetBlock = null;
   cpu.walkPhase = 0; cpu.chargeSpeed = 0;
-  cpu.x = 60; cpu.z = 60; cpu.yaw = 0; // プレイヤーは原点(0,0)スタートなので、少し離れた位置から始める
+  cpu.airY = 0; cpu.vy = 0; cpu.jumpsUsed = 0; cpu.jumpForHighBlock = false;
+  // プレイヤーとCPUはステージの両端(±Z)から向き合う形でスタートする(お互いyaw差=180°でちょうど向かい合う)
+  const vsStartOffset = curGroundHalf*0.7; // 端に寄り過ぎないよう、半分の70%の位置にする
+  pos.x = 0; pos.z = vsStartOffset; yaw = 0;              // プレイヤーは+Z側から、-Z方向(CPU側)を向いてスタート
+  cpu.x = 0; cpu.z = -vsStartOffset; cpu.yaw = Math.PI;   // CPUは-Z側から、+Z方向(プレイヤー側)を向いてスタート
+  vsJojoCooldown = 0;
+  vsResultCameraTimer = 0;
   cpuMesh.group.visible = true;
-  cpuMesh.group.position.set(cpu.x, 0, cpu.z);
+  cpuMesh.group.position.set(cpu.x, cpu.airY, cpu.z);
   cpuShadowMesh.visible = true;
   vsResultEl.style.display = 'none';
   vsPlayerResourceEl.style.display = 'flex';
@@ -5907,9 +5970,15 @@ function collectVsBlock(who){
 // ジョジョ立ちで相手にヒットしたとき、所持している物資を1つ奪う(ダメージが無効化された場合でも成立する)
 function transferVsResource(loserIsPlayer){
   if (loserIsPlayer){
-    if (playerResourceCount > 0){ playerResourceCount--; cpu.resourceCount++; }
+    if (playerResourceCount > 0){
+      playerResourceCount--; cpu.resourceCount++;
+      flyResourceIcon(vsPlayerResourceEl, vsCpuResourceEl);
+    }
   } else {
-    if (cpu.resourceCount > 0){ cpu.resourceCount--; playerResourceCount++; }
+    if (cpu.resourceCount > 0){
+      cpu.resourceCount--; playerResourceCount++;
+      flyResourceIcon(vsCpuResourceEl, vsPlayerResourceEl);
+    }
   }
   updateVsHud();
 }
@@ -5917,7 +5986,7 @@ function transferVsResource(loserIsPlayer){
 // プレイヤーのジョジョ立ちがCPUに命中したときの処理(pressJojo()から呼ばれる)
 function hitCpuWithJojo(){
   if (cpu.damageInvincibleTimer >= 0) return; // 直後の連続ヒットを防ぐ(プレイヤー側と同じ2秒無敵)
-  spawnExplosion(cpu.x, LEG_LEN+TORSO_H*0.5, cpu.z);
+  spawnExplosion(cpu.x, cpu.airY+LEG_LEN+TORSO_H*0.5, cpu.z); // ジャンプでブロックを取りに行っている最中に被弾した場合も、その高さで爆発させる
   playExplosionSound();
   if (cpu.form === 2){
     // 既存仕様(フォーム2はダメージ無効でフォーム1に戻るだけ)をそのまま踏襲する。ただし物資は奪われる
@@ -5958,7 +6027,7 @@ function triggerCpuJojo(){
   playBishiSound();
   const fx = -Math.sin(cpu.yaw), fz = -Math.cos(cpu.yaw);
   const cx = cpu.x + fx*JOJO_FORWARD_OFFSET, cz = cpu.z + fz*JOJO_FORWARD_OFFSET;
-  const cy = LEG_LEN + TORSO_H*0.5;
+  const cy = cpu.airY + LEG_LEN + TORSO_H*0.5; // ジャンプ中に発動した場合もその高さでドームを表示する
   showJojoDome(cx, cy, cz);
   const range = cpu.form === 2 ? JOJO_DESTROY_RANGE_FORM2 : JOJO_DESTROY_RANGE;
   const pd = Math.hypot(pos.x-cx, pos.z-cz); // プレイヤーは常に地上付近にいる前提で、水平距離のみの簡易判定にする
@@ -6025,14 +6094,23 @@ function updateCpu(dt){
     if (cpu.worldEngageTimer <= 0) activateCpuWorld();
   }
 
+  // 簡易な垂直ジャンプ物理(プレイヤーのupdateAirPhysicsと同じ重力定数JUMP_GRAVITYを流用する)。
+  // ジョジョ立ち中(cpu.jojoActive)でも重力は止めない(空中でポーズを取り始めたら、そのまま落下しつつポーズする)
+  if (cpu.airY > 0 || cpu.vy !== 0){
+    cpu.vy -= JUMP_GRAVITY*dt;
+    cpu.airY += cpu.vy*dt;
+    if (cpu.airY <= 0){ cpu.airY = 0; cpu.vy = 0; cpu.jumpsUsed = 0; cpu.jumpForHighBlock = false; }
+  }
+
   if (cpu.jojoActive){
     // 決めポーズ中は移動しない(簡易表現。関節の補間はせず、その場で静止させるだけ)
     cpu.jojoTimer += dt;
     if (cpu.jojoTimer >= CPU_JOJO_POSE_TIME) cpu.jojoActive = false;
     cpu.chargeSpeed = 0;
   } else {
-    // 移動: 一番近い生存中の物資ブロックへまっすぐ向かう。2段ジャンプ限定の高所ブロックも実際のジャンプ物理は持たせず、
-    // 距離だけで取得できる簡易挙動にする(近くまで来れば高さに関わらず取得できる)
+    // 移動: 一番近い生存中の物資ブロックへまっすぐ向かう。物資ブロックは全て地上20m(高所は35m)に浮いているため、
+    // プレイヤーと同じくジャンプしないと取得できない。高所ブロック(QBLOCK_HIGH_EXTRA_Y分高い)は単発ジャンプでは
+    // 届かない高さのため、頂点に達した時点で2段ジャンプする(プレイヤーの多段ジャンプ相当)
     const target = findNearestAliveBlock(cpu.x, cpu.z);
     if (target){
       const dx = target.x-cpu.x, dz = target.z-cpu.z;
@@ -6047,12 +6125,30 @@ function updateCpu(dt){
       } else {
         cpu.chargeSpeed = 0;
       }
-      if (dist <= QBLOCK_SIZE*0.6){ // プレイヤー側の判定を簡略化した円形の到達判定
-        target.alive = false;
-        target.mesh.visible = false;
-        target.shadow.visible = false;
-        triggerCpuForm2();
-        collectVsBlock('cpu');
+      const withinReach = dist <= QBLOCK_SIZE*0.6; // プレイヤー側の判定を簡略化した円形の到達判定(水平方向)
+      // ブロック直下まで来て、まだ地上にいるならジャンプを開始する
+      if (withinReach && cpu.airY === 0 && cpu.jumpsUsed === 0){
+        cpu.vy = JUMP_V0;
+        cpu.jumpsUsed = 1;
+        cpu.jumpForHighBlock = target.bottomY > QBLOCK_BOTTOM_Y;
+      }
+      // 高所ブロック狙いの場合、1段目の頂点(vyが0以下になった瞬間)で自動的に2段ジャンプする
+      if (cpu.jumpForHighBlock && cpu.jumpsUsed === 1 && cpu.vy <= 0){
+        cpu.vy = JUMP_V0;
+        cpu.jumpsUsed = 2;
+      }
+      // 取得判定: プレイヤーのupdateQBlock()と同じく、足元(airY)〜頭頂(airY+CHAR_HEIGHT)とブロックの
+      // 上下範囲(bottomY〜bottomY+QBLOCK_SIZE)が重なっていることを条件にする(地上に立ったままでは届かない)
+      if (withinReach){
+        const headY = cpu.airY + CHAR_HEIGHT;
+        const blockTop = target.bottomY + QBLOCK_SIZE;
+        if (cpu.airY <= blockTop && headY >= target.bottomY){
+          target.alive = false;
+          target.mesh.visible = false;
+          target.shadow.visible = false;
+          triggerCpuForm2();
+          collectVsBlock('cpu');
+        }
       }
     } else {
       cpu.chargeSpeed = 0;
@@ -6076,7 +6172,7 @@ function updateCpu(dt){
 
   // 見た目の反映(既存の敵ザク用歩行アニメーション関数をそのまま流用する)
   updateZakuWalkAnim(cpu, dt);
-  cpuMesh.group.position.set(cpu.x, 0, cpu.z);
+  cpuMesh.group.position.set(cpu.x, cpu.airY, cpu.z);
   cpuMesh.group.rotation.y = cpu.yaw;
   cpuShadowMesh.position.set(cpu.x, 0.03, cpu.z);
   cpuShadowMesh.visible = !isOffGround(cpu.x, cpu.z);
@@ -6089,7 +6185,7 @@ function respawnVsEntityAtCenter(who){
     if (state === 'falling') state = 'normal';
     currentSpeed = 0; currentYawRate = 0;
   } else {
-    cpu.x = 0; cpu.z = 0;
+    cpu.x = 0; cpu.z = 0; cpu.airY = 0; cpu.vy = 0; cpu.jumpsUsed = 0; cpu.jumpForHighBlock = false;
   }
 }
 
@@ -6164,6 +6260,9 @@ function loop(now){
     updateRadar();
     updateCpu(dt); // VS Mode専用(vsMode===falseなら内部で即return)
     updateVsMatchTimer(dt); // VS Modeの制限時間(100秒)判定
+    // 勝敗確定後もカメラを動かし続けるための専用タイマー。update(dt)はisVsPlayerFrozen()で早期returnして進まなくなるため、
+    // ボス撃破時の演出カメラ(victoryTimer)とは別に、ここで独立して進める
+    if (vsMode && vsMatchOver) vsResultCameraTimer += dt;
     if (!demoActive && !vsMode) digestRecordFrame(dt); // ハイライトダイジェスト用のリングバッファ記録(デモプレイ・VS Modeでは記録しない)
   }
   if (gameOver){
