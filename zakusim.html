@@ -176,7 +176,7 @@
   /* ---- タッチ操作UI(スマホ等ポインタ精度が粗いデバイスのみ表示) ---- */
   #stick8, #actionButtons, #pauseBtn, #fullscreenBtn { display:none; }
   /* 難易度選択ボタンはPC・スマホ両方に表示する(PCはマウスクリック、スマホはタップで開始できる) */
-  #diffButtons, #diffButtonsRow1 { display:flex; gap:14px; margin-top:4px; justify-content:center; }
+  #diffButtons { display:flex; flex-wrap:wrap; gap:14px; margin-top:4px; justify-content:center; }
   @media (pointer:coarse){
     #ui { display:none; }
     #stick8 { display:block; }
@@ -398,7 +398,7 @@
     #difficulty .avatar { width:clamp(36px,9vh,64px); height:clamp(36px,9vh,64px); margin:0 auto clamp(3px,1vh,8px); }
     #difficulty .gametitle { font-size:clamp(18px,7vh,40px); margin-bottom:clamp(2px,0.8vh,6px); }
     #difficulty .title { font-size:clamp(11px,3.4vh,20px); margin-bottom:clamp(6px,2.4vh,16px); }
-    #diffButtons, #diffButtonsRow1 { margin-top:2px; gap:10px; }
+    #diffButtons { margin-top:2px; gap:10px; }
     .diffbtn { padding:clamp(6px,1.8vh,10px) clamp(12px,3vh,18px); font-size:clamp(12px,3vh,16px); }
     #autoRotateLabel, #soundLabel, #tutorialLabel, #classicBgmLabel { margin-top:clamp(5px,1.6vh,14px); gap:8px; font-size:clamp(10px,2.6vh,13px); }
     #autoRotateLabel { font-size:clamp(5px,1.3vh,6.5px); } /* 視点変更のみフォントサイズを半分にする */
@@ -525,14 +525,11 @@
   <img class="avatar" src="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/7QCEUGhvdG9zaG9wIDMuMAA4QklNBAQAAAAAAGgcAigAYkZCTUQwYTAwMGFhZTAxMDAwMDM4MDMwMDAwMzYwNDAwMDAyMjA1MDAwMGUwMDUwMDAwYzYwNjAwMDBjMzA4MDAwMDFkMDkwMDAwMDIwYTAwMDA5MzBhMDAwMDY3MGQwMDAwAP/bAIQABQYGCwgLCwsLCw0LCwsNDg4NDQ4ODw0ODg4NDxAQEBEREBAQEA8TEhMPEBETFBQTERMWFhYTFhUVFhkWGRYWEgEFBQUKBwoICQkICwgKCAsKCgkJCgoMCQoJCgkMDQsKCwsKCw0MCwsICwsMDAwNDQwMDQoLCg0MDQ0MExQTExOc/8IAEQgAlgCWAwEiAAIRAQMRAf/EAHkAAAICAwEAAAAAAAAAAAAAAAABAgcDBQYEEAABAwICBggEBAcAAAAAAAABAAIRAyEEEhAwMTJBUQUTICJhcYGhQGCRsRQjwdEVM0JScuHwEQEAAgEDAgUEAwEBAAAAAAABABEhMUFREGEgMHGBkaGxwdFA4fDxUP/aAAwDAQACAAMAAAABtRxYMTQCAAASaYoyQRhOIQhkgKEMkGocBYFfitNpqYxghiIjASYEYyTIxnEIRnEWOM4ix19YdeNWo21NMACOrT2pyXWLIKaeKHmlxsodqeX1kowyQRCOSLWOurHrgVrg1MBhGtLN4/Fl1nT6ndQybYfHZMfR8Noc/nwWHtKZ73IdQpL0PGpxFCtrLrRlsDFIADwU3btZeyHrnxnSeqfd1ta+j02x57k7I5N59JtNjHH6rZjhz5udUZIUKzs2smrZAUgANDWFo6CE622u/wB77T09Lr9n4VyNX3LTi32Sw63uNGwyhn56KkkRrGz6wZbBETkRAeg3PFRydKvPrYx7FRJx1mr2+nnDQ9nzu8kbcDHNJpirCz6wC0iCRlWMDwcr26WbVc72wJzgPD59ft4uOpW3ck5IjKTxjMlY2VWoWYRESIoHETGIRIQIQhsi2TIgSIgOt7GrkLIK3AsgrcCx410BYpXQyxiuRFiOuhlildCVjFcgWMVyBY1cgL//2gAIAQEAAQUC+Vy/WEwquJDFT6SBQM6ajsrWYuVRfnbq+tcTQbkWEcXt0Vm5msotnDxrMQGAtdKw9Rh0VekQHV8W9zxkpKuzKMFis2qquhPqfhsQelmx0UVjKxFFgBPSGDFJZU1kLDvh2pq72JFM1hlFWnUaHUwHinhhRWLylk0VT6gqjgyVTEDUPPeqA1C2k7MGELDPRErpDDA00xUqbqYZqX0CmUEGQ+nRlNoRoxv8nKqawjs9PVf1VB3KGnE7DTD1Qwwpmg0DVOdlAxTVWf8AlUMQ1Tor7rSnnvUTqsTR65v8MVWhnpjoxC2iq3MG0SE+hmDKLgr/ACj/AP/aAAgBAwABPwH4Zrc1gqtF1OzhGh7oQM9qkRMcTu+axBMnPvGFTouqTlbMXKz5S4OZu2Oa0clRDqmeGHuQSRcAGf27XUOrFrWb23yVDA1quZ9iKRc0+Y2rC44UKbhllxP/AH0WFLK4bUqUXVXtluaAZ87iYVJ1HCgt6t1Frpkuae8T43mO03EOoEmmYkbYBvyvw91g+k6tNrhZ2Z7i6W/3b152+idHBdEulhbyNl0vJps5Zr/S36odltB1QHK0ujkJXUuNw0mPDQ5xbBFjzTq7nulzpJ7VPFPpiGvICZiXs3XkTdSjdZR2J+E//9oACAECAAE/AfhwZ0NbKI7VUuDSW8NvksOXOniGiTHBVH5ATBMcBcnyVbEFoplocTUAIY3bHGeWXiqdYFtMiXZy4TxBF7yBbhs5drCYllDrHVGl7C2Cxt3OuIgSL+qxlajh29Uyi9v4hjKmfuwBMhru9mm3AETF05mYoy2wdCfmftIceEdqnJ3gN7x3eMRx5LGfmuEgABgaIPLdtBt6qnmvm9FUVOzij2TUDdq60D10NWXtZfBZRy0Aws3xH//aAAgBAQAGPwL5k2T9ldse/YJQ7hk7EDrHAgESbeCJF/FSeekheW267sR4HWHKRM94ckI+yLGmSzbohuziVEyDzmEWviXDgIQIdx5AfZBp3v21Q8U4i99nndWYc3sqjp7xN0SNs5SgNkkBCNh581e6KB8RqgnZptAst2WTsQyty8CnNOwrZfmu/Njw8Vser5lYiOCA5akou5lTG1DzCGgu2ZL+elviJ1RjxUeP6oiOU+YQK26Kn+OlvlH01bl9Ox6qCjNzq55K5U+X3W8PgMswt/2XVzAt7Lf9tO2Fve3+0Puto+Uv/9oACAEBAQE/If8A1X+E/wAAcdy4N9HyQyWpbZVLU/KL03of0gATI6PXtASzRNG0Dx7TANXtw7/Xy6vWYKF4UgUuz6as7FaroX9V5rSKjyMOKOqgF3tzHUob1lx9YmZM4KH7eZpkCrKnRo5TSYrOtbwreFaGDo26/Xjpryy4b7du8oY0wEC6bJEFzpHDmgSw19MTNpZMVbvR9EEvcN857u5nynAGla9iOEpa1uf6pgn6Qp9Wv0hImF9jb97+JqYgnA6/J94xmiDxbVy3tbzkD9kL67O8opbDId5kKqT0p8rMeBiIUD1GVvfc3jZoFS4qO9duh14v0Zl5HJ/vacxtrC4COHELf6Ji/IfuFCxNx/qM3arobra4yjaAvmjyTtvTHxAuWI67FEVtNHvp22Yph9zOT6TgQzSXCwqDTU0a/hnMVwkc0Cu+a9oseTrsyUHvtMDoezbKvxOERditS64T35nLC9HhfwLDZqC/r0f+HJCmomN5gwV61Z64fby9zuw64L3esX262rxq/EDQESXgLsY0gDQC61vXiuXLlw0TQLzCPJ2YJmo3bVhMP9H3hbJ0zpyn0mkSh+h8wbq/FcuXLljuRszpCu//AD1mhFAENNkc/r/cuAvQDTiWxKj1KuJaGTAEEbwy37z9CP7g9kt7S5cuXLl/z78F/wDj/wD/2gAMAwEBAgEDAQAAEBGjvvGmFhCTIAuimhALqcJA/ktkHNAWCd/5oeQf4EgPxZ3b4g6ksAwCLGBM4TSOLxpGsgKNimzn/wBSIEFWzjbOJpaKrCBICDDNPMD/2gAIAQMBAT8Q8a+U+FEBa6H/AGJ5f1E+RTpTlQeY+HMAsMuGcOo1nHE0hvpeoA4qPBq8Gx+3Y1diODzajkS8HObs+ZojHkgGNDKMTwJpUNHNCsrV0ae9EBxhN00lj0uXwYSsXZV3n6d5oAVsD3Ag4sahHyNTIwbZoaB7xrZs2dLOa8N1ZXbBacCctbCpT2qKW6aUdxkT9iXE6te1C/WULk9C5O33XBQHHSurQNqUB60MA5AppNVz0QQhoGk9GXqURzhNijFHHPguXLZlmiqt195flitW67xvlhNUW2ly5flnyGM//9oACAECAQE/EH+MtZYOhvommUKceIgNlthNZ2q0J9BgtmYKtFdOBsN2WJeKzOYDIXkmcd5UEWq+6p+B4gDazBDQYHJ2UWzfGl6MpgQPROn/AFIjc/ErpXWnwGFHe3Pi5gtoO5P+wap/gficvSfEf9i8LBbX5izN4Xdc9BcxKPEh1D0FTYQXSpUqV0qVK8Z5H//aAAgBAQEBPxDynoxjGMSJDynoxiRiRInlsYxjBGJE8Fda8L0ToYxiQhK8NSujAnKhKg8g/PQRiRIkCV1FpC6twWypHCZdu/ttNTHC9w61SIGAENEdHokcstxe+JUvmAE3uNQA22vYF9g9GJEiRPCnECOo5n4bSA8HYlYnaE7DemigpnVdYqNldFetvoPY4O8/qvAcU11ivRAzd5wlM3E6JE6J1rrkZU1cH3Ee6pnDlV2c+a01ggXYTqS4cvs6HnAot9jDP+NJmhP3m75O3ae9xRhAmL+kOBH9szVSZNti+r9AxOiRInhuTR3Abe9TPkqzpqeosMwFdUL1GiER+qsA+7g5lCDWzbtoR2BYiJeyH6zqEO7sDEKbyJa9suZ7InfBTS6nOwPYt/Ec6abenVJXhRyGfdx9ptqkTRgqwIqZyi29r3vMF9tSlyhpiw65YTFf9hruZDzLocvS2vFOgekRWl4krTsn5VJwAg4m2dcLXd4M1Mjq3hoApzE6MeldUcQ9gmgMCpkCvZJ++TLauXNtGhfBpoanMIbB33NH4mGJ+ZkK6VBogdz8EKTLTMG1bFsR0KGyHN7E/ERz1j4rlykmeyBpc8QNBkdmSu9apoB9YHsrwTuj8sV3PZ/jiZcAFVTlfSj1R8hKLkFQEw9mP7FczCZc1X9JArTHR63Ll9dNh+aHTAtgXerOukPAbdQXaq8/9RCaasFPRclR4uLgPvuxG7a1tC7XT1etJTopB3IJVGNMvLiMdxqKa74lhm0SA0ZO7oPZtAAliCPI5PpLmkf5GZckKtwvylJRe+d2XLi9aSkp0WK7HKwvhaSIrsfT+8e1gJbj5VtNdSQCrn4gDmd4+IMsBunBwss3usvmGCeVrur/AMqaO/q0nC7tZbS52/ky/bxAuLLlwelx6nS5fW5cuXFly5cuXF63DqvouXLixZcuDL6L4Bl+IYsZfQ8i+ly5/9k=" alt="やっさん">
   <div class="gametitle">ZAKUMIRO2</div>
   <div class="title">難易度を選択</div>
-  <!-- 第一部とVS Modeは対になる存在として、他の難易度ボタンとは別の行にまとめて中央揃えで並べる -->
-  <div id="diffButtonsRow1">
-    <button type="button" class="diffbtn" id="diffBtn1">第一部</button>
-    <button type="button" class="diffbtn vsmode" id="diffBtnVs" style="display:none;">⚔️ VS Mode</button>
-  </div>
   <div id="diffButtons">
+    <button type="button" class="diffbtn" id="diffBtn1">第一部</button>
     <button type="button" class="diffbtn" id="diffBtn2">第二部</button>
     <button type="button" class="diffbtn part3" id="diffBtn3" style="display:none;">第三部</button>
+    <button type="button" class="diffbtn vsmode" id="diffBtnVs" style="display:none;">⚔️ VS Mode</button>
   </div>
   <label id="tutorialLabel">
     <input type="checkbox" id="tutorialCheck" checked>
