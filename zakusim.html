@@ -30,6 +30,38 @@
     transition:background 0.15s, opacity 0.15s;
   }
   .lifePip.empty { background:rgba(0,0,0,0.1); border-color:rgba(0,0,0,0.15); }
+  /* ---- VS Mode専用HUD。プレイヤーの物資数はライフバーの真下、CPUの体力・物資数は右上(タイマー・走破距離の下)にまとめる ---- */
+  .vsResourceBox {
+    display:flex; align-items:center; gap:6px;
+    background:rgba(255,255,255,0.78); border:1px solid #ccc; border-radius:6px;
+    padding:5px 10px; font-family:-apple-system,"Segoe UI","Hiragino Kaku Gothic ProN",Meiryo,sans-serif;
+    font-size:14px; font-weight:bold; color:#222; user-select:none; pointer-events:none;
+  }
+  .vsResourceBox .vsIcon { font-size:15px; }
+  #vsPlayerResource { position:fixed; top:48px; left:10px; z-index:11; }
+  #vsCpuPanel {
+    position:fixed; top:84px; right:14px; z-index:11;
+    display:flex; flex-direction:column; align-items:flex-end; gap:4px;
+  }
+  .vsCpuLabel {
+    font-family:"Rajdhani","Segoe UI",sans-serif; font-weight:700; letter-spacing:0.1em;
+    font-size:11px; color:#ffe0da; text-shadow:0 0 6px rgba(0,0,0,0.8), 0 0 2px rgba(0,0,0,0.9);
+  }
+  .vsLifeBar { display:flex; gap:4px; background:rgba(255,255,255,0.78); border:1px solid #ccc; border-radius:6px; padding:7px 10px; }
+  /* ---- VS Mode結果画面 ---- */
+  #vsResult {
+    display:none; position:fixed; left:0; top:0; width:100%; height:100%; z-index:22;
+    align-items:center; justify-content:center; flex-direction:column;
+    background:rgba(0,0,0,0.72); color:#fff; text-align:center;
+    font-family:-apple-system,"Segoe UI","Hiragino Kaku Gothic ProN",Meiryo,sans-serif;
+  }
+  #vsResultText { font-size:clamp(36px,10vw,64px); font-weight:900; letter-spacing:0.05em; margin-bottom:12px; }
+  #vsResultText.vsResult-WIN { color:#ffcc33; text-shadow:0 0 20px rgba(255,204,51,0.7); }
+  #vsResultText.vsResult-LOSE { color:#ff6a5a; text-shadow:0 0 20px rgba(255,106,90,0.6); }
+  #vsResultText.vsResult-DRAW { color:#9fd6ff; text-shadow:0 0 20px rgba(159,214,255,0.6); }
+  #vsResultDetail { font-size:16px; color:#ddd; margin-bottom:24px; }
+  /* VS Modeでは操作説明を右下へ移動する(左上はプレイヤーの物資数表示に使うため) */
+  body.vs-mode #ui { top:auto; left:auto; bottom:calc(20px + env(safe-area-inset-bottom)); right:calc(14px + env(safe-area-inset-right)); }
   #timer {
     position:fixed; top:10px; right:14px; z-index:10;
     font-family: -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
@@ -128,11 +160,11 @@
   #difficulty .opt b { color:#ffcc33; }
 
   /* ---- タッチ操作UI(スマホ等ポインタ精度が粗いデバイスのみ表示) ---- */
-  #diffButtons, #stick8, #actionButtons, #pauseBtn, #fullscreenBtn { display:none; }
+  #diffButtons, #diffButtonsRow1, #stick8, #actionButtons, #pauseBtn, #fullscreenBtn { display:none; }
   @media (pointer:coarse){
     #ui { display:none; }
     #difficulty .opt { display:none; } /* PC用のキー操作ヒントはスマホでは非表示にしてすっきりさせる */
-    #diffButtons { display:flex; gap:14px; margin-top:4px; }
+    #diffButtons, #diffButtonsRow1 { display:flex; gap:14px; margin-top:4px; justify-content:center; }
     #stick8 { display:block; }
     #actionButtons { display:flex; }
     #pauseBtn { display:block; } /* PCはESCキーでポーズできるため、ボタンはスマホ等タッチデバイスのみ表示する */
@@ -156,6 +188,13 @@
     border-color:rgba(190,130,255,0.75); box-shadow:0 0 14px rgba(151,60,250,0.35);
   }
   .diffbtn.part3:active { background:rgba(151,60,250,0.5); }
+  /* VS Modeは対戦らしさを出すため、赤系の配色にする */
+  .diffbtn.vsmode {
+    color:#ffe5e0;
+    background:linear-gradient(180deg, rgba(255,90,60,0.32), rgba(35,15,10,0.55));
+    border-color:rgba(255,140,110,0.75); box-shadow:0 0 14px rgba(255,90,60,0.35);
+  }
+  .diffbtn.vsmode:active { background:rgba(255,90,60,0.5); }
   #autoRotateLabel, #soundLabel, #tutorialLabel {
     display:flex; align-items:center; gap:10px; margin-top:clamp(16px,4.5vw,28px);
     font-size:clamp(13px,3.7vw,16px); color:#fff; user-select:none; cursor:pointer;
@@ -189,7 +228,7 @@
     font-size:16px; padding:6px 10px; border-radius:6px; border:2px solid rgba(125,220,255,0.65);
     background:rgba(255,255,255,0.92); color:#222; width:150px; text-align:center;
   }
-  #goNameSubmit, #rankingCloseBtn, #goDigestReplayBtn, #goBackBtn {
+  #goNameSubmit, #rankingCloseBtn, #goDigestReplayBtn, #goBackBtn, #vsResultBackBtn {
     font-family: -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
     font-size:14px; font-weight:bold; color:#04151c;
     background:linear-gradient(180deg, rgba(125,220,255,0.9), rgba(77,200,255,0.75));
@@ -345,7 +384,7 @@
     #difficulty .avatar { width:clamp(36px,9vh,64px); height:clamp(36px,9vh,64px); margin:0 auto clamp(3px,1vh,8px); }
     #difficulty .gametitle { font-size:clamp(18px,7vh,40px); margin-bottom:clamp(2px,0.8vh,6px); }
     #difficulty .title { font-size:clamp(11px,3.4vh,20px); margin-bottom:clamp(6px,2.4vh,16px); }
-    #diffButtons { margin-top:2px; gap:10px; }
+    #diffButtons, #diffButtonsRow1 { margin-top:2px; gap:10px; }
     .diffbtn { padding:clamp(6px,1.8vh,10px) clamp(12px,3vh,18px); font-size:clamp(12px,3vh,16px); }
     #autoRotateLabel, #soundLabel, #tutorialLabel { margin-top:clamp(5px,1.6vh,14px); gap:8px; font-size:clamp(10px,2.6vh,13px); }
     #autoRotateLabel { font-size:clamp(5px,1.3vh,6.5px); } /* 視点変更のみフォントサイズを半分にする */
@@ -376,6 +415,11 @@
     #topCenterBar { top:6px; }
     #resetBtn, #pauseBtn, #fullscreenBtn { font-size:11px; padding:4px 10px; }
     #radarBox { top:64px; right:8px; }
+    /* VS Modeの横画面用の詰め直し(ライフバー・タイマー・走破距離が薄型化されるのに合わせる) */
+    #vsPlayerResource { top:38px; left:6px; padding:4px 8px; font-size:12px; }
+    #vsCpuPanel { top:58px; right:8px; gap:3px; }
+    .vsLifeBar { padding:4px 8px; gap:3px; }
+    .vsResourceBox { padding:4px 8px; font-size:12px; }
   }
 </style>
 </head>
@@ -394,6 +438,18 @@
     A/× : ジャンプ &nbsp; X/□ : ジョジョ立ち &nbsp; Y/△ : ザ・世界<br>
     L2/R2 : ズーム &nbsp; Start/Options : ポーズ
   </div>
+</div>
+<!-- VS Mode専用HUD。プレイヤーの物資数はライフバーの真下、CPUの体力・物資数は右上に配置する -->
+<div id="vsPlayerResource" class="vsResourceBox" style="display:none;"><span class="vsIcon">📦</span><span id="vsPlayerCount">0</span></div>
+<div id="vsCpuPanel" style="display:none;">
+  <div class="vsCpuLabel">ENEMY</div>
+  <div id="vsCpuLifeBar" class="vsLifeBar"></div>
+  <div id="vsCpuResource" class="vsResourceBox"><span class="vsIcon">📦</span><span id="vsCpuCount">0</span></div>
+</div>
+<div id="vsResult" style="display:none;">
+  <div id="vsResultText">WIN</div>
+  <div id="vsResultDetail"></div>
+  <button type="button" id="vsResultBackBtn">↺ 戻る</button>
 </div>
 <div id="timer">0.0s</div>
 <div id="distance">走破距離: 0.0m</div>
@@ -440,10 +496,15 @@
   <div class="gametitle">ZAKUMIRO2</div>
   <div class="title">難易度を選択</div>
   <div class="opt"><b>1</b>キー : 第一部</div>
+  <div class="opt" id="optVs" style="display:none;"><b>4</b>キー : VS Mode(対CPU)</div>
   <div class="opt"><b>2</b>キー : 第二部</div>
   <div class="opt" id="opt3" style="display:none;"><b>3</b>キー : 第三部</div>
-  <div id="diffButtons">
+  <!-- 第一部とVS Modeは対になる存在として、他の難易度ボタンとは別の行にまとめて中央揃えで並べる -->
+  <div id="diffButtonsRow1">
     <button type="button" class="diffbtn" id="diffBtn1">第一部</button>
+    <button type="button" class="diffbtn vsmode" id="diffBtnVs" style="display:none;">⚔️ VS Mode</button>
+  </div>
+  <div id="diffButtons">
     <button type="button" class="diffbtn" id="diffBtn2">第二部</button>
     <button type="button" class="diffbtn part3" id="diffBtn3" style="display:none;">第三部</button>
   </div>
@@ -1729,6 +1790,7 @@ for (let i=0;i<QBLOCK_TARGET_COUNT;i++) qblocks.push(createQBlockInstance());
 
 // 難易度ごとの物資ブロック配置数(第一部・第二部は少なめに絞り、第三部はプール全数=QBLOCK_TARGET_COUNTのまま)
 function qblockPlacementTarget(diff){
+  if (vsMode) return VS_TOTAL_BLOCKS; // VS Modeは通常の第一部(4個)ではなく専用の7個を配置する
   if (diff === 1) return 4;
   if (diff === 2) return 8;
   return qblocks.length;
@@ -1921,6 +1983,7 @@ function triggerVictory(){
   stopThrusterSound();
   awardTrophy(difficulty === 1 ? 'last_boss_p1' : 'last_boss');
   if (difficulty === 1) pendingPart2TeaseMessage = true; // 次にタイトル画面へ戻ったタイミングで一度だけメッセージを出す
+  if (difficulty === 1) unlockVsMode(); // 第一部クリアでVS Modeを解禁する(triggerVictory()はVS Mode中は呼ばれないため、ここでのdifficulty===1は必ず通常プレイの第一部を指す)
   if (difficulty === 2) unlockPart3(); // 第二部クリアで第三部を解禁する
   spawnExplosion(bossX, currentBossY(), bossZ);
   playExplosionSound();
@@ -2693,6 +2756,34 @@ let paused = false; // 一時停止中。ゲームの動作は全て停止する
 const timerEl = document.getElementById('timer');
 const distanceEl = document.getElementById('distance');
 const lifeBarEl = document.getElementById('lifeBar');
+// ---- VS Mode用HUD要素 ----
+const vsPlayerResourceEl = document.getElementById('vsPlayerResource');
+const vsPlayerCountEl = document.getElementById('vsPlayerCount');
+const vsCpuPanelEl = document.getElementById('vsCpuPanel');
+const vsCpuLifeBarEl = document.getElementById('vsCpuLifeBar');
+const vsCpuCountEl = document.getElementById('vsCpuCount');
+const vsResultEl = document.getElementById('vsResult');
+const vsResultTextEl = document.getElementById('vsResultText');
+const vsResultDetailEl = document.getElementById('vsResultDetail');
+// プレイヤー・CPUの物資数表示とCPUの体力バーをまとめて更新する
+function updateVsHud(){
+  vsPlayerCountEl.textContent = playerResourceCount;
+  vsCpuCountEl.textContent = cpu.resourceCount;
+  vsCpuLifeBarEl.innerHTML = '';
+  for (let i=0;i<PLAYER_MAX_LIFE;i++){
+    const pip = document.createElement('div');
+    pip.className = 'lifePip' + (i < cpu.hp ? '' : ' empty');
+    vsCpuLifeBarEl.appendChild(pip);
+  }
+}
+// 勝敗結果画面を表示する(WIN/LOSE/DRAW)
+function showVsResult(result){
+  const label = result === 'WIN' ? '勝利!' : result === 'LOSE' ? '敗北...' : '引き分け';
+  vsResultTextEl.textContent = label;
+  vsResultTextEl.className = 'vsResult-' + result;
+  vsResultDetailEl.textContent = '物資 プレイヤー ' + playerResourceCount + ' - ' + cpu.resourceCount + ' CPU';
+  vsResultEl.style.display = 'flex';
+}
 function updateLifeBar(){
   lifeBarEl.innerHTML = '';
   for (let i=0;i<PLAYER_MAX_LIFE;i++){
@@ -2874,17 +2965,36 @@ function savePart3Unlocked(){
   try{ localStorage.setItem(PART3_UNLOCK_KEY, '1'); }catch(e){}
 }
 let part3Unlocked = loadPart3Unlocked();
-function updateDifficultyUI(){
-  document.getElementById('opt3').style.display = part3Unlocked ? 'block' : 'none';
-  document.getElementById('diffBtn3').style.display = part3Unlocked ? 'block' : 'none';
-}
 function unlockPart3(){
   if (part3Unlocked) return;
   part3Unlocked = true;
   savePart3Unlocked();
   updateDifficultyUI();
 }
-updateDifficultyUI(); // 前回までに解禁済みなら、起動時から第三部ボタンを表示する
+
+// ---- VS Mode(対CPU)の解禁状態。第一部クリアで解禁し、第三部と同じ考え方でブラウザに永続保存する ----
+const VS_MODE_UNLOCK_KEY = 'zakusim_vsmode_unlocked';
+function loadVsModeUnlocked(){
+  try{ return localStorage.getItem(VS_MODE_UNLOCK_KEY) === '1'; }catch(e){ return false; }
+}
+function saveVsModeUnlocked(){
+  try{ localStorage.setItem(VS_MODE_UNLOCK_KEY, '1'); }catch(e){}
+}
+let vsModeUnlocked = loadVsModeUnlocked();
+function unlockVsMode(){
+  if (vsModeUnlocked) return;
+  vsModeUnlocked = true;
+  saveVsModeUnlocked();
+  updateDifficultyUI();
+}
+
+function updateDifficultyUI(){
+  document.getElementById('opt3').style.display = part3Unlocked ? 'block' : 'none';
+  document.getElementById('diffBtn3').style.display = part3Unlocked ? 'block' : 'none';
+  document.getElementById('optVs').style.display = vsModeUnlocked ? 'block' : 'none';
+  document.getElementById('diffBtnVs').style.display = vsModeUnlocked ? 'block' : 'none';
+}
+updateDifficultyUI(); // 前回までに解禁済みなら、起動時から第三部・VS Modeボタンを表示する
 
 function awardTrophy(id){
   if (earnedTrophiesThisRun.has(id)) return; // 同じプレイ中に何度も表示しない
@@ -2947,6 +3057,64 @@ function applyWorldScale(diff){
 let currentRateStep = SKULL_RATE_STEP_LV1;
 let awaitingDifficulty = true;
 let invincibleMode = false; // デバッグ用無敵モード(難易度ボタンを3秒以上長押ししてから離すと発動)。落下・ドクロ/敵ザクの接触が無効になる
+
+// ============================================================
+// VS Mode(対CPU)
+// ============================================================
+// 【設計方針】このゲームはプレイヤーが1人であることを前提に、位置(pos)・向き(yaw)・ポーズ(cur.*)・
+// 状態(state)などをすべて「共有のグローバル変数」として実装している。CPU(敵機)を追加するにあたり、
+// 既存の一人用モードの物理・アニメーション関数(updateAirPhysics/applyPose等)を一切変更・共用せず、
+// CPU専用の簡易な独立システム(位置・状態を持つだけの軽量オブジェクト+専用の見た目・専用のAI関数)として
+// 実装する。CPUの見た目は敵ザク用のモデル(createZakuMesh)を流用し、ポーズも滑らかな関節補間はせず、
+// 「その場で決めポーズの見た目に切り替える」簡易表現にとどめる。これにより一人用モードのコードには
+// 一切手を入れずに済み、既存プレイへの影響(リグレッション)のリスクを最小化している。
+let vsMode = false; // VS Mode(対CPU)で開始したプレイかどうか
+const VS_TOTAL_BLOCKS = 7;          // フィールドに配置する物資ブロックの総数(通常の第一部は4個)。うちQBLOCK_HIGH_COUNT(3)個は多段ジャンプでしか届かない高さに配置する(applyLv2HighBlocks()をそのまま流用する)
+const VS_MATCH_TIME_LIMIT = 100;    // 秒。経過したら強制的に判定に入る
+const VS_JOJO_DAMAGE = 2;           // ジョジョ立ちを相手にヒットさせたときに減らす体力
+const VS_CPU_JOJO_ENGAGE_MIN = 0.5, VS_CPU_JOJO_ENGAGE_MAX = 1.0; // プレイヤーが射程に入ってからジョジョ立ちを発動するまでのランダム待ち時間(秒)
+const VS_CPU_WORLD_ENGAGE_MIN = 1.0, VS_CPU_WORLD_ENGAGE_MAX = 10.0; // ハロ取得からザ・世界を発動するまでのランダム待ち時間(秒)
+const VS_RESPAWN_Y_SAFE = 0; // 盤外に落ちた場合、原点付近まで戻す(中央復帰。ペナルティなし)
+
+let playerResourceCount = 0; // VS Mode中のプレイヤーの物資所持数
+let vsRemainingBlocks = 0;   // フィールドにまだ残っている(どちらも取っていない)物資の数
+let vsMatchTimer = 0;
+let vsMatchOver = false;     // 勝敗が決まり、結果画面を表示中かどうか
+
+// CPU(敵機)の状態。プレイヤー本体とは完全に独立した、簡易な物理・AIシステムを持つ
+const cpu = {
+  x: 0, z: 0, yaw: 0,
+  hp: 5, form: 1, form2Timer: 0,
+  damageInvincibleTimer: -1, // プレイヤーと同じ「被弾後2秒無敵」をCPU側にも設ける
+  resourceCount: 0,
+  worldCharged: false,   // ハロに触れてザ・世界が使用可能か
+  worldActive: false, worldTimer: 0,
+  worldEngageTimer: -1,  // ハロ取得後、ザ・世界発動までのカウントダウン(-1は未計測)
+  jojoActive: false, jojoTimer: 0,     // ジョジョ立ちの決めポーズ中(この間は移動しない)
+  jojoEngageTimer: -1,   // プレイヤーが射程に入ってからジョジョ立ち発動までのカウントダウン(-1は未計測)
+  targetBlock: null,     // 現在向かっている物資ブロック
+  // 見た目のアニメーションは敵ザク用のupdateZakuWalkAnim()をそのまま流用する(mesh/walkPhase/chargeSpeedは同関数が要求する形)
+  mesh: null, walkPhase: 0, chargeSpeed: 0
+};
+// CPUの胴体色は、共有素材(zakuBodyMat/zakuForm2BodyMat)をそのまま使うと通常の敵ザクの色まで
+// 変わってしまうため、複製して独立させる(フォーム2時の色変化をCPUだけに適用するため)
+const cpuBodyMatNormal = zakuBodyMat.clone();
+const cpuBodyMatForm2 = zakuForm2BodyMat.clone();
+const cpuMesh = createZakuMesh(false);
+cpuMesh.group.traverse(obj => { if (obj.isMesh && obj.material === zakuBodyMat) obj.material = cpuBodyMatNormal; });
+cpuMesh.group.visible = false;
+cpu.mesh = cpuMesh;
+const cpuShadowMat = new THREE.MeshBasicMaterial({ color:0x000000, transparent:true, opacity:0.35, depthWrite:false });
+const cpuShadowMesh = new THREE.Mesh(new THREE.CircleGeometry(3.2, 32), cpuShadowMat);
+cpuShadowMesh.rotation.x = -Math.PI/2;
+cpuShadowMesh.position.y = 0.03;
+cpuShadowMesh.visible = false;
+scene.add(cpuShadowMesh);
+// CPUの胴体色をフォームに応じて切り替える(プレイヤーのupdatePlayerAppearance()に相当する簡易版)
+function updateCpuAppearance(){
+  const mat = cpu.form === 2 ? cpuBodyMatForm2 : cpuBodyMatNormal;
+  cpuMesh.group.traverse(obj => { if (obj.isMesh && (obj.material === cpuBodyMatNormal || obj.material === cpuBodyMatForm2)) obj.material = mat; });
+}
 
 // ---- タイトル画面の自動プレイデモ ----
 // タイトル画面(難易度選択)で5秒間無操作が続くと、下手なAIによる自動プレイが始まる。Lv.1/Lv.2は起動のたびに交互。
@@ -3435,7 +3603,8 @@ function updateHiddenAura(dt){
   }
 }
 
-function startGame(diff, invincible){
+function startGame(diff, invincible, vs){
+  vsMode = !!vs; // VS Modeはdiff=1(第一部)のステージ設定を土台にしつつ、随所でvsModeを見て挙動を分岐する
   skyMode = (skyMode === 'space') ? 'gradient' : 'space'; // プレイのたびに背景を交互に切り替える
   applySkyMode();
   invincibleMode = !!invincible;
@@ -3443,12 +3612,12 @@ function startGame(diff, invincible){
   currentRateStep = diff!==1 ? SKULL_RATE_STEP_LV2 : SKULL_RATE_STEP_LV1;
   applyWorldScale(diff); // 第一部はステージの広さを60%に縮小する(ブロック・キャラクター等のサイズは変更しない)
   placeQBlocks(); // 上記の広さの変更を反映して？ブロックを配置し直す(resetGame時点ではまだ難易度未確定のため)
-  if (diff !== 1) applyLv2HighBlocks(); // 第二部・第三部は？ブロックのうち3個を多段ジャンプでしか届かない高さに引き上げる
+  if (vsMode || diff !== 1) applyLv2HighBlocks(); // 第二部・第三部・VS Modeは？ブロックのうち3個を多段ジャンプでしか届かない高さに引き上げる
   applyPart3Appearance(diff === 3); // 第三部限定の見た目(十字スリット・足の太さ)を切り替える
   updatePlayerAppearance(); // ボディ色を即座に反映する(これが無いと前回のプレイの色が被弾など別の更新契機まで残ってしまう)
   cameraAutoRotate = document.getElementById('autoRotateCheck').checked; // 難易度選択画面のチェックボックスを反映(デフォルトはオン)
   soundEnabled = document.getElementById('soundEnabledCheck').checked; // 同じくチェックボックスを反映(デフォルトはオン)
-  tutorialActive = diff === 1 && document.getElementById('tutorialCheck').checked; // チュートリアルは第一部かつチェックONのときだけ有効
+  tutorialActive = !vsMode && diff === 1 && document.getElementById('tutorialCheck').checked; // VS Modeではチュートリアルを出さない
   tutorialPhase4Timer = -1;
   tutorialHintEl.style.display = 'none';
   if (tutorialActive) startTutorialIntro(); // ウソツキー博士の導入メッセージ(メッセージ0)を表示し、その間ゲームを停止させる
@@ -3456,16 +3625,31 @@ function startGame(diff, invincible){
   difficultyEl.style.display = 'none';
   elapsedTime = 0;
   distanceTraveled = 0;
-  skulls[0].activated = true;
-  scheduleNextSkull(skulls[0]);
+  if (vsMode){
+    startVsMatch(); // ドクロは湧かせず、代わりにCPU・VS用HUDを初期化する(詳細は「VS Mode」節を参照)
+  } else {
+    skulls[0].activated = true;
+    scheduleNextSkull(skulls[0]);
+  }
+  document.body.classList.toggle('vs-mode', vsMode); // PC操作説明を右下に移動する等、VS Mode専用のCSSレイアウトに切り替える
   startBGM();
 }
+function startVsModeGame(){ startGame(1, false, true); } // 難易度選択画面のVS Modeボタン/4キーから呼ばれる(無敵モードの長押し判定は無し)
 
 function resetGame(){
   stopBGM();
   stopThrusterSound();
   digestResetAll();
   diffPressActive = false;
+  // VS Modeの後片付け(CPU・専用HUD・結果画面を隠し、フラグを戻す)。VS Mode以外のプレイでは何もしないのと同じ状態になる
+  vsMode = false;
+  vsMatchOver = false;
+  cpuMesh.group.visible = false;
+  cpuShadowMesh.visible = false;
+  vsPlayerResourceEl.style.display = 'none';
+  vsCpuPanelEl.style.display = 'none';
+  vsResultEl.style.display = 'none';
+  document.body.classList.remove('vs-mode');
   for (const k in keysDown) keysDown[k] = false; // デモの自動プレイ入力等が押しっぱなしのまま残ってしまうのを防ぐ(通常のキー入力もここで一旦すべて解放する)
   characterRoot.visible = true;
   pos.x = 0; pos.z = 0; yaw = 0;
@@ -3586,7 +3770,9 @@ function resetGame(){
 const keysDown = {};
 
 // ---- 移動・アクションの本体(実キーボードとタッチUIの両方から呼ぶ共通処理) ----
+function vsMatchFrozen(){ return vsMode && vsMatchOver; } // VS Modeで勝敗が確定した後は、結果画面を表示するだけなので一切の操作を受け付けない
 function pressMoveKey(key){
+  if (vsMatchFrozen()) return;
   keysDown[key] = true;
 
   // ポーズ中に移動系キーを押すと自動解除(ジョジョ立ちは操作受付禁止時間中を除く。空中発動時は空中姿勢に戻る)
@@ -3599,6 +3785,7 @@ function pressMoveKey(key){
 function releaseMoveKey(key){ keysDown[key] = false; }
 
 function pressJump(){
+  if (vsMatchFrozen()) return;
   // ポーズ中にJを押すと自動解除、そのまま地上ならジャンプ開始(ジョジョ立ちは操作受付禁止時間中を除く)
   if (state==='tetsuzanko' || (state==='jojo' && jojoTimer >= JOJO_INPUT_LOCK_TIME)) state = inAir ? 'air' : 'normal';
   if (state==='normal' && !inAir){
@@ -3627,6 +3814,7 @@ function performMultiJump(){
 }
 
 function pressJojo(){
+  if (vsMatchFrozen()) return;
   // 地上(normal)・ジャンプ中(air)・ジョジョ立ち中(再発動)のいずれかから発動できる
   if (state!=='normal' && state!=='jojo' && state!=='air') return;
   // 操作受付禁止時間(JOJO_INPUT_LOCK_TIME)中は無反応。それ以降はポーズ中でも再発動(やり直し)できる
@@ -3682,9 +3870,16 @@ function pressJojo(){
       removeZaku(i);
     }
   }
+
+  // VS Mode: CPUが効果範囲内にいれば、体力を2減らして物資を1つ奪う(CPUは常に地上付近にいる前提で水平距離のみ判定する簡易方式)
+  if (vsMode){
+    const cd = Math.hypot(cpu.x-center.x, cpu.z-center.z);
+    if (cd <= currentJojoRange()) hitCpuWithJojo();
+  }
 }
 
 function pressTetsuzanko(){
+  if (vsMatchFrozen()) return;
   // ザ・ワールド:ハロに接触して解禁するまで発動不可(初期状態では受け付けない)。地上・ジャンプ中どちらでも発動できる
   if ((state==='normal' || state==='air') && theWorldCharged){
     theWorldCharged = false;
@@ -3743,6 +3938,8 @@ window.addEventListener('keydown', (e)=>{
     if (!e.repeat && (e.key === '1' || e.key === '2' || (e.key === '3' && part3Unlocked))){
       diffKeyDownAt[e.key] = performance.now();
       diffPressActive = true;
+    } else if (!e.repeat && e.key === '4' && vsModeUnlocked){
+      startVsModeGame(); // VS Modeは無敵モードの長押し判定を持たないため、即座に開始する
     }
     return;
   }
@@ -3921,6 +4118,8 @@ function wireDiffButton(id, diff){
 wireDiffButton('diffBtn1', 1);
 wireDiffButton('diffBtn2', 2);
 wireDiffButton('diffBtn3', 3);
+// VS Modeボタンは無敵モードの長押し判定を持たない、単純なタップ開始にする
+document.getElementById('diffBtnVs').addEventListener('touchstart', (e)=>{ e.preventDefault(); ensureAudio(); if (awaitingDifficulty) startVsModeGame(); }, { passive:false });
 
 // 難易度選択画面をチェックボックス操作等でいじっている間は、自動デモの開始タイマーをリセットしておく
 difficultyEl.addEventListener('touchstart', ()=>{ titleIdleTimer = 0; }, { passive:true });
@@ -3959,6 +4158,9 @@ goDigestReplayBtnEl.addEventListener('touchstart', (e)=>{ e.preventDefault(); e.
 const resetBtnEl = document.getElementById('resetBtn');
 resetBtnEl.addEventListener('click', (e)=>{ e.stopPropagation(); ensureAudio(); resetGame(); });
 resetBtnEl.addEventListener('touchstart', (e)=>{ e.preventDefault(); e.stopPropagation(); ensureAudio(); resetGame(); }, { passive:false });
+// VS Mode結果画面の「戻る」ボタン(難易度選択画面へ)
+document.getElementById('vsResultBackBtn').addEventListener('click', (e)=>{ e.stopPropagation(); resetGame(); });
+document.getElementById('vsResultBackBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); e.stopPropagation(); resetGame(); }, { passive:false });
 
 // 一時停止(PCはESCキー、スマホ等タッチデバイスはリセットボタンの隣のPAUSEボタン)。
 // プレイ中(難易度選択画面・GAME OVER画面以外)にのみ切り替えられる
@@ -4454,17 +4656,29 @@ function updateAirPhysics(dt){
   }
 }
 
+// VS Modeでプレイヤーが完全凍結中かどうか(勝敗確定後、またはCPUのザ・世界発動中で自分は未発動の場合)。
+// update()だけでなく、その直後に呼ばれるupdateJumpThruster/updateHoverThrustも合わせて止めるために関数化している
+function isVsPlayerFrozen(){
+  return vsMode && (vsMatchOver || (cpu.worldActive && !theWorldActive));
+}
 function update(dt){
+  if (isVsPlayerFrozen()) return; // ザ・世界の発動操作(pressTetsuzanko)自体はこの関数を経由しない別の入力関数のため、凍結中でも常に受け付けられる
+
   if (inAir) updateAirPhysics(dt);
 
-  // 地面(板)の外に、体の中心がFALL_PENETRATION以上侵入したら落下を開始する(身体が完全に外に出てから落とすため。無敵モード中は落下しない)
-  // ジャンプで地上面より上にいる間(inAir)は判定しない。スリットと同様、ジャンプで飛び越えている間は猶予を与える
-  if (!invincibleMode && state !== 'falling' && !inAir && (Math.abs(pos.x) > curGroundHalf + FALL_PENETRATION || Math.abs(pos.z) > curGroundHalf + FALL_PENETRATION)){
-    enterFalling(false);
-  }
-  // 地上にいる(ジャンプ中でない)状態でスリットの上を通過しても落下する(無敵モード中は落下しない)
-  if (!invincibleMode && state !== 'falling' && !inAir && isOverSlit(pos.x, pos.z)){
-    enterFalling(true);
+  // VS Modeは盤外に出ても「中央で復活」するだけ(ペナルティ無し)なので、既存の落下(enterFalling)には進ませない
+  if (vsMode){
+    if (!inAir && (Math.abs(pos.x) > curGroundHalf || Math.abs(pos.z) > curGroundHalf)) respawnVsEntityAtCenter('player');
+  } else {
+    // 地面(板)の外に、体の中心がFALL_PENETRATION以上侵入したら落下を開始する(身体が完全に外に出てから落とすため。無敵モード中は落下しない)
+    // ジャンプで地上面より上にいる間(inAir)は判定しない。スリットと同様、ジャンプで飛び越えている間は猶予を与える
+    if (!invincibleMode && state !== 'falling' && !inAir && (Math.abs(pos.x) > curGroundHalf + FALL_PENETRATION || Math.abs(pos.z) > curGroundHalf + FALL_PENETRATION)){
+      enterFalling(false);
+    }
+    // 地上にいる(ジャンプ中でない)状態でスリットの上を通過しても落下する(無敵モード中は落下しない)
+    if (!invincibleMode && state !== 'falling' && !inAir && isOverSlit(pos.x, pos.z)){
+      enterFalling(true);
+    }
   }
 
   if (state === 'normal'){
@@ -4909,6 +5123,7 @@ function updateSkullSlot(s, dt){
 }
 
 function updateEnemy(dt){
+  if (vsMode) return; // VS Modeはドクロを出現させない仕様のため(startGame側でskulls[0]を能動的に有効化しないだけでは、このループが自動的に有効化してしまうため明示的にガードする)
   if (theWorldActive || state === 'victory') return; // ザ・ワールド中・ラスボス撃破演出中はドクロも静止(移動・出現・命中判定とも停止)
   let activeCount = 1;
   if (elapsedTime >= SKULL_TRIPLE_UNLOCK_TIME) activeCount = 3;
@@ -5070,7 +5285,7 @@ function triggerForm2(){
   updateLifeBar();
   updatePlayerAppearance();
   playPowerUpSound();
-  awardTrophy('first_form2');
+  if (!vsMode) awardTrophy('first_form2'); // VS Modeはトロフィーと非連動の独立モードのため
 }
 
 function updateForm2(dt){
@@ -5105,6 +5320,10 @@ function updateQBlock(dt){
     b.mesh.visible = false;
     b.shadow.visible = false;
     triggerForm2();
+    if (vsMode){
+      collectVsBlock('player'); // VS Modeは専用の勝敗・カウント処理に分岐し、トロフィー・ボス出現等の一人用ロジックは一切通らない
+      continue;
+    }
     qblocksCollected++;
     if (qblocksCollected === 1) triggerDigestCapture('first_block'); // ハイライトダイジェスト用
     if (qblocksCollected === qblockLastWarningCount(difficulty)){
@@ -5169,13 +5388,15 @@ function activateTheWorld(){
   theWorldBannerEl.style.display = 'block';
   theWorldCountdownEl.style.display = 'block';
   invertWorldColors(true);
-  awardTrophy('first_world');
+  if (!vsMode) awardTrophy('first_world'); // VS Modeはトロフィーと非連動の独立モードのため
   playBishiSound(); // ジョジョ立ちと同じ「ビシッ」という音を鳴らす
   stopBGM();
 }
 
 function deactivateTheWorld(){
   theWorldActive = false;
+  // VS ModeでCPU側がまだ発動中の場合は、演出(ネガポジ反転・バナー・BGM)を継続させる(どちらか一方でも発動中なら止めない)
+  if (vsMode && cpu.worldActive) return;
   invertWorldColors(false);
   theWorldBannerEl.style.display = 'none';
   theWorldCountdownEl.style.display = 'none';
@@ -5207,9 +5428,15 @@ function currentHaroSpawnArc(){
   // 背面カメラ設定(視界自動回転オン)でないときは出現角度を広げる
   return cameraAutoRotate ? HARO_SPAWN_ARC : HARO_SPAWN_ARC_WIDE;
 }
+// ハロが停止すべきかどうか。通常プレイはプレイヤーのザ・世界のみ見る。VS Modeは双方の状態を見て、
+// 片方だけ発動中なら停止、両方発動中(相殺して双方動ける状態)または両方未発動なら通常通り動く
+function haroShouldFreeze(){
+  if (!vsMode) return theWorldActive;
+  return (theWorldActive || cpu.worldActive) && !(theWorldActive && cpu.worldActive);
+}
 function updateHaroSlot(s, dt){
   if (s.phase === 'idle'){
-    if (theWorldActive) return; // ザ・ワールド中は周期カウンタも停止
+    if (haroShouldFreeze()) return; // ザ・世界中は周期カウンタも停止
     s.timer += dt;
     if (s.timer >= currentHaroCycle()){
       s.timer = 0;
@@ -5244,8 +5471,8 @@ function updateHaroSlot(s, dt){
     }
 
   } else if (s.phase === 'flying'){
-    if (!theWorldActive){
-      // ザ・ワールド中は静止(移動・タイマー進行を停止)。それ以外は通常通り進行
+    if (!haroShouldFreeze()){
+      // ザ・世界中は静止(移動・タイマー進行を停止)。それ以外は通常通り進行
       s.flightT += dt;
       const f = clamp(s.flightT/s.flightDur, 0, 1);
       s.x = s.startX + (s.targetX-s.startX)*f;
@@ -5308,6 +5535,21 @@ function updateHaroSlot(s, dt){
       s.mesh.visible = false;
       s.shadowMesh.visible = false;
       s.timer = 0;
+    } else if (vsMode){
+      // VS ModeはCPU側にもハロが当たりうる(プレイヤーと同じ命中判定半径)
+      const cpuHitDist = Math.hypot(s.x-cpu.x, s.z-cpu.z);
+      if (cpuHitDist <= HARO_HIT_RADIUS){
+        cpu.worldCharged = true;
+        // 「ハロをとったらザ・世界を1〜10秒以内に発動する」というCPUの行動をここでカウントダウン開始する
+        cpu.worldEngageTimer = VS_CPU_WORLD_ENGAGE_MIN + Math.random()*(VS_CPU_WORLD_ENGAGE_MAX-VS_CPU_WORLD_ENGAGE_MIN);
+        playChargeSound();
+        cpu.hp = Math.min(PLAYER_MAX_LIFE, cpu.hp + 1); // プレイヤーと同じくハロ取得で体力1回復
+        updateVsHud();
+        s.phase = 'idle';
+        s.mesh.visible = false;
+        s.shadowMesh.visible = false;
+        s.timer = 0;
+      }
     }
   }
 }
@@ -5624,6 +5866,256 @@ function replayDigestFromGameOver(){
   gameoverEl.style.display = 'none';
 }
 
+// ============================================================
+// VS Mode(対CPU): マッチ進行・CPU AI
+// ============================================================
+// startGame(1, false, true)から呼ばれ、対戦に関する状態を初期値に戻してCPUを表示状態にする
+function startVsMatch(){
+  playerResourceCount = 0;
+  cpu.resourceCount = 0;
+  vsRemainingBlocks = qblockTotalCount; // placeQBlocks()で確定した実際の配置数(VS_TOTAL_BLOCKSと一致するはず)
+  vsMatchTimer = 0;
+  vsMatchOver = false;
+  playerLife = PLAYER_MAX_LIFE;
+  updateLifeBar();
+  cpu.hp = PLAYER_MAX_LIFE;
+  cpu.form = 1; cpu.form2Timer = 0;
+  cpu.damageInvincibleTimer = -1;
+  updateCpuAppearance();
+  cpu.worldCharged = false; cpu.worldActive = false; cpu.worldTimer = 0; cpu.worldEngageTimer = -1;
+  cpu.jojoActive = false; cpu.jojoTimer = 0; cpu.jojoEngageTimer = -1;
+  cpu.targetBlock = null;
+  cpu.walkPhase = 0; cpu.chargeSpeed = 0;
+  cpu.x = 60; cpu.z = 60; cpu.yaw = 0; // プレイヤーは原点(0,0)スタートなので、少し離れた位置から始める
+  cpuMesh.group.visible = true;
+  cpuMesh.group.position.set(cpu.x, 0, cpu.z);
+  cpuShadowMesh.visible = true;
+  vsResultEl.style.display = 'none';
+  vsPlayerResourceEl.style.display = 'flex';
+  vsCpuPanelEl.style.display = 'flex';
+  updateVsHud();
+}
+
+// 物資を取得したときの共通処理(プレイヤー・CPUどちらの取得もここを通る)。奪い合いの対象はカウントのみで、
+// 一度取得されたブロックそのものは(通常仕様と同じく)再出現しない
+function collectVsBlock(who){
+  vsRemainingBlocks--;
+  if (who === 'player') playerResourceCount++; else cpu.resourceCount++;
+  updateVsHud();
+  checkVsMatchEnd();
+}
+// ジョジョ立ちで相手にヒットしたとき、所持している物資を1つ奪う(ダメージが無効化された場合でも成立する)
+function transferVsResource(loserIsPlayer){
+  if (loserIsPlayer){
+    if (playerResourceCount > 0){ playerResourceCount--; cpu.resourceCount++; }
+  } else {
+    if (cpu.resourceCount > 0){ cpu.resourceCount--; playerResourceCount++; }
+  }
+  updateVsHud();
+}
+
+// プレイヤーのジョジョ立ちがCPUに命中したときの処理(pressJojo()から呼ばれる)
+function hitCpuWithJojo(){
+  if (cpu.damageInvincibleTimer >= 0) return; // 直後の連続ヒットを防ぐ(プレイヤー側と同じ2秒無敵)
+  spawnExplosion(cpu.x, LEG_LEN+TORSO_H*0.5, cpu.z);
+  playExplosionSound();
+  if (cpu.form === 2){
+    // 既存仕様(フォーム2はダメージ無効でフォーム1に戻るだけ)をそのまま踏襲する。ただし物資は奪われる
+    cpu.form = 1; cpu.form2Timer = 0;
+    updateCpuAppearance();
+  } else {
+    cpu.hp = Math.max(0, cpu.hp - VS_JOJO_DAMAGE);
+    cpu.damageInvincibleTimer = 0;
+  }
+  transferVsResource(false);
+  checkVsMatchEnd();
+}
+// CPUのジョジョ立ちがプレイヤーに命中したときの処理
+function hitPlayerWithCpuJojo(){
+  if (damageInvincibleTimer >= 0) return;
+  spawnExplosion(pos.x, airY+cur.hipY+TORSO_H*0.5, pos.z);
+  playExplosionSound();
+  if (playerForm === 2){
+    playerForm = 1;
+    updatePlayerAppearance();
+  } else {
+    playerLife = Math.max(0, playerLife - 1);
+    updateLifeBar();
+    updatePlayerAppearance();
+    damageInvincibleTimer = 0;
+  }
+  transferVsResource(true);
+  checkVsMatchEnd();
+}
+
+const CPU_JOJO_POSE_TIME = 0.6; // CPUの決めポーズ保持時間(簡易表現。関節の補間はせず、この間だけ移動を止めるだけにとどめる)
+// CPUのジョジョ立ち発動。プレイヤーと同じ「前方5m中心」の判定式を、CPU自身の座標・向きを基準に計算する
+// (指示通り、CPUは判定のためにあえてプレイヤーの方へ向き直ったりはしない)
+function triggerCpuJojo(){
+  cpu.jojoActive = true;
+  cpu.jojoTimer = 0;
+  cpu.jojoEngageTimer = -1;
+  playBishiSound();
+  const fx = -Math.sin(cpu.yaw), fz = -Math.cos(cpu.yaw);
+  const cx = cpu.x + fx*JOJO_FORWARD_OFFSET, cz = cpu.z + fz*JOJO_FORWARD_OFFSET;
+  const cy = LEG_LEN + TORSO_H*0.5;
+  showJojoDome(cx, cy, cz);
+  const range = cpu.form === 2 ? JOJO_DESTROY_RANGE_FORM2 : JOJO_DESTROY_RANGE;
+  const pd = Math.hypot(pos.x-cx, pos.z-cz); // プレイヤーは常に地上付近にいる前提で、水平距離のみの簡易判定にする
+  if (pd <= range) hitPlayerWithCpuJojo();
+}
+
+// CPU版のザ・世界発動(プレイヤーのactivateTheWorld()の簡易版)。演出(反転・バナー・BGM)はプレイヤー側と共有する
+function activateCpuWorld(){
+  cpu.worldCharged = false;
+  cpu.worldActive = true;
+  cpu.worldTimer = 0;
+  playBishiSound();
+  invertWorldColors(true);
+  theWorldBannerEl.textContent = 'ザ・世界 発動中!(敵)';
+  theWorldBannerEl.style.display = 'block';
+  stopBGM();
+}
+// CPU版のフォーム2化(物資取得時に呼ぶ。プレイヤーのtriggerForm2()の簡易版。トロフィーは対象外)
+function triggerCpuForm2(){
+  cpu.form = 2;
+  cpu.form2Timer = 0;
+  cpu.hp = PLAYER_MAX_LIFE; // プレイヤーと同じく変身の瞬間に全回復
+  updateCpuAppearance();
+  playPowerUpSound();
+}
+
+// 一番近い生存中の物資ブロックを探す
+function findNearestAliveBlock(fromX, fromZ){
+  let nearest = null, nearestDist = Infinity;
+  for (const b of qblocks){
+    if (!b.alive) continue;
+    const d = Math.hypot(b.x-fromX, b.z-fromZ);
+    if (d < nearestDist){ nearestDist = d; nearest = b; }
+  }
+  return nearest;
+}
+
+// CPUの毎フレーム処理。移動(物資へ直進)・ジョジョ立ち判定・ザ・世界の発動と経過・盤外復帰をまとめて行う
+function updateCpu(dt){
+  if (!vsMode || vsMatchOver) return;
+
+  // プレイヤーがザ・世界を発動中、自分は未発動なら完全に凍結する(update(dt)側のプレイヤー凍結と対になる仕様。
+  // 「重なっている間は双方動ける」ので、cpu.worldActiveがtrueの間はこの凍結は働かない)
+  if (theWorldActive && !cpu.worldActive) return;
+
+  if (cpu.damageInvincibleTimer >= 0){
+    cpu.damageInvincibleTimer += dt;
+    if (cpu.damageInvincibleTimer >= DAMAGE_INVINCIBLE_TIME) cpu.damageInvincibleTimer = -1;
+  }
+  if (cpu.form === 2){
+    cpu.form2Timer += dt;
+    if (cpu.form2Timer >= FORM2_DURATION){ cpu.form = 1; updateCpuAppearance(); }
+  }
+  if (cpu.worldActive){
+    cpu.worldTimer += dt;
+    const duration = cpu.form === 2 ? THE_WORLD_FREEZE_TIME_FORM2 : THE_WORLD_FREEZE_TIME;
+    if (cpu.worldTimer >= duration){
+      cpu.worldActive = false;
+      if (!theWorldActive){ invertWorldColors(false); theWorldBannerEl.style.display = 'none'; startBGM(); } // プレイヤー側も未発動なら演出を戻す
+    }
+  }
+  if (cpu.worldCharged && cpu.worldEngageTimer >= 0){
+    cpu.worldEngageTimer -= dt;
+    if (cpu.worldEngageTimer <= 0) activateCpuWorld();
+  }
+
+  if (cpu.jojoActive){
+    // 決めポーズ中は移動しない(簡易表現。関節の補間はせず、その場で静止させるだけ)
+    cpu.jojoTimer += dt;
+    if (cpu.jojoTimer >= CPU_JOJO_POSE_TIME) cpu.jojoActive = false;
+    cpu.chargeSpeed = 0;
+  } else {
+    // 移動: 一番近い生存中の物資ブロックへまっすぐ向かう。2段ジャンプ限定の高所ブロックも実際のジャンプ物理は持たせず、
+    // 距離だけで取得できる簡易挙動にする(近くまで来れば高さに関わらず取得できる)
+    const target = findNearestAliveBlock(cpu.x, cpu.z);
+    if (target){
+      const dx = target.x-cpu.x, dz = target.z-cpu.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist > 0.5){
+        cpu.yaw = Math.atan2(-dx, -dz); // プレイヤーの移動積分式(-sin,-cos)と同じ規約に合わせる
+        const speed = RUN_SPEED*(cpu.form === 2 ? FORM2_SPEED_MULT : 1);
+        const step = Math.min(dist, speed*dt);
+        cpu.x += (dx/dist)*step;
+        cpu.z += (dz/dist)*step;
+        cpu.chargeSpeed = speed;
+      } else {
+        cpu.chargeSpeed = 0;
+      }
+      if (dist <= QBLOCK_SIZE*0.6){ // プレイヤー側の判定を簡略化した円形の到達判定
+        target.alive = false;
+        target.mesh.visible = false;
+        target.shadow.visible = false;
+        triggerCpuForm2();
+        collectVsBlock('cpu');
+      }
+    } else {
+      cpu.chargeSpeed = 0;
+    }
+
+    // ジョジョ立ちの判定: プレイヤーが射程内に入ったら0.5〜1秒後に発動する(指示通り、狙って振り向いたりはしない)
+    const fx = -Math.sin(cpu.yaw), fz = -Math.cos(cpu.yaw);
+    const ecx = cpu.x + fx*JOJO_FORWARD_OFFSET, ecz = cpu.z + fz*JOJO_FORWARD_OFFSET;
+    const range = cpu.form === 2 ? JOJO_DESTROY_RANGE_FORM2 : JOJO_DESTROY_RANGE;
+    const distToPlayer = Math.hypot(pos.x-ecx, pos.z-ecz);
+    if (distToPlayer <= range){
+      if (cpu.jojoEngageTimer < 0) cpu.jojoEngageTimer = VS_CPU_JOJO_ENGAGE_MIN + Math.random()*(VS_CPU_JOJO_ENGAGE_MAX-VS_CPU_JOJO_ENGAGE_MIN);
+      cpu.jojoEngageTimer -= dt;
+      if (cpu.jojoEngageTimer <= 0) triggerCpuJojo();
+    } else {
+      cpu.jojoEngageTimer = -1; // 範囲外に出たら不発でリセットする
+    }
+  }
+
+  if (Math.abs(cpu.x) > curGroundHalf || Math.abs(cpu.z) > curGroundHalf) respawnVsEntityAtCenter('cpu'); // 盤外は中央復帰(ペナルティ無し)
+
+  // 見た目の反映(既存の敵ザク用歩行アニメーション関数をそのまま流用する)
+  updateZakuWalkAnim(cpu, dt);
+  cpuMesh.group.position.set(cpu.x, 0, cpu.z);
+  cpuMesh.group.rotation.y = cpu.yaw;
+  cpuShadowMesh.position.set(cpu.x, 0.03, cpu.z);
+  cpuShadowMesh.visible = !isOffGround(cpu.x, cpu.z);
+}
+
+// 盤外に出たプレイヤー/CPUを中央付近に戻す(VS Modeはペナルティ無しの即時復帰。既存のenterFalling()は使わない)
+function respawnVsEntityAtCenter(who){
+  if (who === 'player'){
+    pos.x = 0; pos.z = 0; airY = 0; vy = 0; inAir = false;
+    if (state === 'falling') state = 'normal';
+    currentSpeed = 0; currentYawRate = 0;
+  } else {
+    cpu.x = 0; cpu.z = 0;
+  }
+}
+
+// マッチ終了条件(物資ゼロ/どちらかの体力ゼロ)を、状態が変化する操作(取得・ヒット)のたびに個別に呼び出してチェックする
+function checkVsMatchEnd(){
+  if (vsMatchOver) return;
+  if (vsRemainingBlocks <= 0 || playerLife <= 0 || cpu.hp <= 0) resolveVsMatch();
+}
+// 制限時間(100秒)の経過は、他の終了条件と違って「毎フレーム経過している」だけなのでメインループから呼ぶ
+function updateVsMatchTimer(dt){
+  if (!vsMode || vsMatchOver) return;
+  vsMatchTimer += dt;
+  if (vsMatchTimer >= VS_MATCH_TIME_LIMIT) resolveVsMatch();
+}
+// 3つの終了条件(物資ゼロ/体力ゼロ/制限時間経過)いずれも判定方法は共通で「その時点の物資数が多い方の勝ち」。
+// KOそのものに勝敗を決める特別な力は無く、体力が先に0になっても物資数で上回っていれば負けない仕様(指示通り)
+function resolveVsMatch(){
+  vsMatchOver = true;
+  stopBGM();
+  let resultText;
+  if (playerResourceCount > cpu.resourceCount) resultText = 'WIN';
+  else if (playerResourceCount < cpu.resourceCount) resultText = 'LOSE';
+  else resultText = 'DRAW';
+  showVsResult(resultText);
+}
+
 function loop(now){
   requestAnimationFrame(loop);
   const dt = clamp((now-lastTime)/1000, 0, 0.05);
@@ -5646,13 +6138,17 @@ function loop(now){
   } else if (!gameOver && !awaitingDifficulty && !paused){
     if (demoActive) updateDemoAI(dt);
     update(dt);
-    updateJumpThruster(dt); // applyPose()後の最新姿勢で足・バックパックの位置を取得するため、update(dt)の直後に呼ぶ
-    updateHoverThrust(dt); // 第三部限定の地上ホバー噴射も同じ理由でここで呼ぶ
+    if (!isVsPlayerFrozen()){
+      updateJumpThruster(dt); // applyPose()後の最新姿勢で足・バックパックの位置を取得するため、update(dt)の直後に呼ぶ
+      updateHoverThrust(dt); // 第三部限定の地上ホバー噴射も同じ理由でここで呼ぶ
+    }
     if (state !== 'victory' && !theWorldActive) elapsedTime += dt; // ラスボス撃破の瞬間・ザ・世界発動中はタイマーを止める(カウントダウン終了で再開)
-    if (elapsedTime >= 100) awardTrophy('time_100');
-    if (elapsedTime >= 200) awardTrophy('time_200');
-    if (elapsedTime >= 300) awardTrophy('time_300');
-    if (!digestTime20Fired && elapsedTime >= 20){ digestTime20Fired = true; triggerDigestCapture('time_20s'); } // ハイライトダイジェスト用
+    if (!vsMode){ // VS Modeはトロフィー・ハイライトダイジェストのどちらとも非連動の独立モードのため
+      if (elapsedTime >= 100) awardTrophy('time_100');
+      if (elapsedTime >= 200) awardTrophy('time_200');
+      if (elapsedTime >= 300) awardTrophy('time_300');
+      if (!digestTime20Fired && elapsedTime >= 20){ digestTime20Fired = true; triggerDigestCapture('time_20s'); } // ハイライトダイジェスト用
+    }
     updateEnemy(dt);
     updateZakus(dt);
     updateDamageInvincibility(dt);
@@ -5666,7 +6162,9 @@ function loop(now){
     updateTheWorld(dt);
     updateBoss(dt);
     updateRadar();
-    if (!demoActive) digestRecordFrame(dt); // ハイライトダイジェスト用のリングバッファ記録(デモプレイでは記録しない)
+    updateCpu(dt); // VS Mode専用(vsMode===falseなら内部で即return)
+    updateVsMatchTimer(dt); // VS Modeの制限時間(100秒)判定
+    if (!demoActive && !vsMode) digestRecordFrame(dt); // ハイライトダイジェスト用のリングバッファ記録(デモプレイ・VS Modeでは記録しない)
   }
   if (gameOver){
     gameOverTimer += dt;
