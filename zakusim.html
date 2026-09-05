@@ -1310,6 +1310,10 @@ function isOverSlit(x, z){
   const onEW = Math.abs(Math.abs(x)-curSlitDist) <= half && Math.abs(z) <= spanHalf; // 東西方向の辺
   return onNS || onEW;
 }
+// 地面が存在しない位置(ステージ外、またはスリットの真上)かどうかを判定する(自機・敵の影の表示要否に使う)
+function isOffGround(x, z){
+  return Math.abs(x) > curGroundHalf || Math.abs(z) > curGroundHalf || isOverSlit(x, z);
+}
 const groundGroup = new THREE.Group(); // 地面・境界線をまとめる(第一部ではこのグループごと縮小表示する)
 scene.add(groundGroup);
 function createGridTexture(bgHex, lineHex, sizeX, sizeZ){
@@ -1903,6 +1907,7 @@ function updateBoss(dt){
   }
   bossShadowMesh.position.set(bossX, 0.03, bossZ);
   bossShadowMesh.scale.set(bossSizeMult, bossSizeMult, bossSizeMult);
+  bossShadowMesh.visible = !isOffGround(bossX, bossZ); // ステージ外・スリット上には影を落とさない
   // ラスボスブロックの撃破判定はタッチ(接触)ではなく、ジョジョ立ちのヒット判定で行う(詳細はpressJojoを参照)
 }
 
@@ -2480,6 +2485,19 @@ function scheduleBGMStep(){
     src.start(now); src.stop(now+dur);
   }
 
+  // 1拍目・3拍目に低音のキック(バスドラム)を重ねて、ビート感を強化する(メロディのベースラインとは別のリズム楽器)
+  if (barStep === 0 || barStep === 4){
+    const kick = audioCtx.createOscillator();
+    const kickGain = audioCtx.createGain();
+    kick.type = 'sine';
+    kick.frequency.setValueAtTime(120, now);
+    kick.frequency.exponentialRampToValueAtTime(42, now+0.1);
+    kickGain.gain.setValueAtTime(0.7, now);
+    kickGain.gain.exponentialRampToValueAtTime(0.001, now+0.13);
+    kick.connect(kickGain); kickGain.connect(bgmGain);
+    kick.start(now); kick.stop(now+0.14);
+  }
+
   // 裏拍(2拍目・4拍目、各小節内で共通)にスネア風のアクセントを重ねて戦闘曲らしいリズムを作る
   if (barStep === 2 || barStep === 6){
     const sr = audioCtx.sampleRate;
@@ -2939,12 +2957,14 @@ let demoDiffNext = 1;
 let rankingOverlayOpen = false; // ランキングオーバーレイ表示中はタイトル画面の自動デモ開始タイマーを止める
 const demoLabelEl = document.getElementById('demoLabel');
 const DEMO_ZOOM_PERIOD = 35.0; // 秒。ズーム最大⇔最小を1往復する周期(体感5倍ゆっくりに調整)
-const demoAI = { moveTimer:0, jumpTimer:0, jojoTimer:0, zoomT:0 };
+const demoAI = { moveTimer:0, jumpTimer:0, jojoTimer:0, zoomT:0, wentForFirstBlock:false };
 let demoCameraCycleIndex = 0; // 0,1: 固定視点 / 2: 自動回転、を繰り返す(ランダムだと偏って見えることがあるため、3回に2回・1回を確定で保証する)
 function startDemo(){
   startGame(demoDiffNext, false);
-  demoDiffNext = (demoDiffNext === 1) ? 2 : 1;
+  // 第三部解禁後は第一部→第二部→第三部の順で3種類を巡回する(解禁前は従来通り第一部・第二部の交互)
+  demoDiffNext = part3Unlocked ? (demoDiffNext % 3) + 1 : (demoDiffNext === 1 ? 2 : 1);
   demoActive = true;
+  demoAI.wentForFirstBlock = false;
   // チュートリアルはstartGame()側の判定(第一部かつチェックON)をそのまま活かし、デモ中も表示する
   // (以前は明示的に無効化していたが、その場合でもstartGame()内でメッセージ0のpaused=trueは既に発生済みで、
   //  デモのAI入力は本物のキー/タッチ/ゲームパッドのイベントを経由しないため一時停止が解除されず、
@@ -2961,8 +2981,51 @@ function startDemo(){
 function cancelDemo(){
   resetGame(); // resetGame内でdemoActiveをfalseに戻し、タイトル画面(難易度選択)を再表示する
 }
+// デモ開始直後、まだ1個も物資ブロックを取っていない間だけ、最も近い生存中のブロックへまっすぐ向かう
+// (カメラ基準の移動系なので、moveRefYawを基準にした角度差から一番近い移動キーの組み合わせを選ぶ)
+function demoSteerTowardFirstBlock(){
+  let nearest = null, nearestDist = Infinity;
+  for (const b of qblocks){
+    if (!b.alive) continue;
+    const d = Math.hypot(b.x-pos.x, b.z-pos.z);
+    if (d < nearestDist){ nearestDist = d; nearest = b; }
+  }
+  ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].forEach(releaseMoveKey);
+  if (!nearest) return;
+  const targetYaw = Math.atan2(-(nearest.x-pos.x), -(nearest.z-pos.z)); // 移動の積分式(-sin,-cos)と同じ規約
+  let diff = targetYaw - moveRefYaw;
+  diff = ((diff % (Math.PI*2)) + Math.PI*3) % (Math.PI*2) - Math.PI; // -π〜πに正規化
+  const deg = diff*180/Math.PI;
+  if (deg > 112.5) pressMoveKey('ArrowLeft');
+  else if (deg > 22.5){ pressMoveKey('ArrowUp'); pressMoveKey('ArrowLeft'); }
+  else if (deg > -22.5) pressMoveKey('ArrowUp');
+  else if (deg > -112.5){ pressMoveKey('ArrowUp'); pressMoveKey('ArrowRight'); }
+  else pressMoveKey('ArrowRight');
+}
+
 // 下手なAIの入力(方向キーはランダムに切り替え、ジャンプ・ジョジョ立ちも時々押すだけの単純な挙動)
 function updateDemoAI(dt){
+  // ハロに接触してザ・世界が使用可能になったら、すぐ発動する(通常のランダム挙動より優先)
+  if (theWorldCharged) pressTetsuzanko();
+
+  if (!demoAI.wentForFirstBlock){
+    if (qblocksCollected >= 1){
+      demoAI.wentForFirstBlock = true; // 以後は下記の通常のランダム移動に戻る
+    } else {
+      demoSteerTowardFirstBlock();
+      demoAI.jumpTimer -= dt;
+      if (demoAI.jumpTimer <= 0){
+        pressJump();
+        demoAI.jumpTimer = 1.5 + Math.random()*2.5;
+      }
+      // カメラズームは通常時と同じく回し続ける
+      demoAI.zoomT += dt;
+      const zp = (demoAI.zoomT % DEMO_ZOOM_PERIOD) / DEMO_ZOOM_PERIOD;
+      camDist = 10 + (zp<0.5? zp*2 : 2-zp*2)*(150-10);
+      return; // 最初のブロックを取るまでは、以下の通常のランダム移動ロジックを実行しない
+    }
+  }
+
   demoAI.moveTimer -= dt;
   if (demoAI.moveTimer <= 0){
     ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].forEach(releaseMoveKey);
@@ -3035,6 +3098,7 @@ function updateSkullShadow(s){
   const shadowScale = 1 - heightFrac*0.6;
   s.shadowMesh.scale.set(shadowScale, shadowScale, shadowScale);
   s.shadowMesh.material.opacity = 0.2*(1-heightFrac*0.7);
+  if (isOffGround(s.x, s.z)) s.shadowMesh.visible = false; // ステージ外・スリット上には影を落とさない
 }
 function resetSkull(s){
   s.phase = 'idle';
@@ -4866,6 +4930,7 @@ function updateShadow(){
   const scale = 1 - hFrac*0.55;
   shadowMesh.scale.set(scale, scale, scale);
   shadowMat.opacity = 0.35*(1-hFrac*0.85);
+  shadowMesh.visible = !isOffGround(pos.x, pos.z); // ステージ外・スリット上には影を落とさない
 }
 
 // ============================================================
@@ -5201,6 +5266,7 @@ function updateHaroSlot(s, dt){
       const shadowScale = 1 - heightFrac*0.6;
       s.shadowMesh.scale.set(shadowScale, shadowScale, shadowScale);
       s.shadowMesh.material.opacity = 0.3*(1-heightFrac*0.7);
+      if (isOffGround(s.x, s.z)) s.shadowMesh.visible = false; // ステージ外・スリット上には影を落とさない
 
       if (f >= 1){
         s.phase = 'idle';
