@@ -48,6 +48,17 @@
     font-size:11px; color:#ffe0da; text-shadow:0 0 6px rgba(0,0,0,0.8), 0 0 2px rgba(0,0,0,0.9);
   }
   .vsLifeBar { display:flex; gap:4px; background:rgba(255,255,255,0.78); border:1px solid #ccc; border-radius:6px; padding:7px 10px; }
+  /* PC版はVS Modeのライフ・物資表示が小さく見づらいとの指摘に対応し、2倍のサイズで表示する
+     (スマホ等タッチデバイスは下の@media(pointer:coarse)側で従来通りの縮小サイズを維持する) */
+  @media (pointer:fine){
+    body.vs-mode #lifeBar { padding:14px 20px; gap:8px; }
+    body.vs-mode .lifePip { width:32px; height:32px; border-radius:8px; }
+    body.vs-mode #vsPlayerResource { top:82px; }
+    body.vs-mode .vsResourceBox { font-size:28px; padding:10px 20px; gap:12px; }
+    body.vs-mode .vsResourceBox .vsIcon { font-size:30px; }
+    body.vs-mode .vsLifeBar { padding:14px 20px; gap:8px; }
+    body.vs-mode .vsCpuLabel { font-size:22px; }
+  }
   /* ジョジョ立ちで物資を奪った瞬間に、奪われた側→奪った側のアイコンへ飛んでいく演出用(JSがleft/topを書き換えてtransitionで動かす) */
   .vsFlyIcon {
     position:fixed; z-index:25; pointer-events:none; font-size:22px;
@@ -162,16 +173,12 @@
     text-shadow:0 0 26px rgba(77,200,255,0.45);
   }
   #difficulty .title { font-size:clamp(15px,4.2vw,26px); font-weight:600; letter-spacing:clamp(1px,0.6vw,2px); color:#9fd6ff; opacity:0.9; margin-bottom:clamp(16px,4.5vw,28px); }
-  #difficulty .opt { font-size:26px; margin:8px 0; }
-  #difficulty .opt b { color:#ffcc33; }
-
   /* ---- タッチ操作UI(スマホ等ポインタ精度が粗いデバイスのみ表示) ---- */
   #stick8, #actionButtons, #pauseBtn, #fullscreenBtn { display:none; }
   /* 難易度選択ボタンはPC・スマホ両方に表示する(PCはマウスクリック、スマホはタップで開始できる) */
   #diffButtons, #diffButtonsRow1 { display:flex; gap:14px; margin-top:4px; justify-content:center; }
   @media (pointer:coarse){
     #ui { display:none; }
-    #difficulty .opt { display:none; } /* PC用のキー操作ヒントはスマホでは非表示にしてすっきりさせる */
     #stick8 { display:block; }
     #actionButtons { display:flex; }
     #pauseBtn { display:block; } /* PCはESCキーでポーズできるため、ボタンはスマホ等タッチデバイスのみ表示する */
@@ -428,6 +435,22 @@
     .vsLifeBar { padding:4px 8px; gap:3px; }
     .vsResourceBox { padding:4px 8px; font-size:12px; }
   }
+
+  /* ---- スマホの縦画面は表示エリアが狭く、上部のHUD要素同士が重なりやすいため、フォントサイズ・大きさを半分程度に縮小する ---- */
+  @media (pointer:coarse) and (orientation:portrait){
+    #lifeBar { padding:4px 5px; gap:2px; }
+    .lifePip { width:8px; height:8px; border-radius:2px; }
+    #timer { font-size:10px; padding:3px 7px; }
+    #distance { font-size:7px; padding:2px 7px; }
+    #tutorialHint { font-size:8px; padding:4px 8px; }
+    #resetBtn, #pauseBtn, #fullscreenBtn { font-size:7px; padding:3px 7px; }
+    #pauseBtn, #fullscreenBtn { padding:3px 6px; }
+    #vsPlayerResource { padding:3px 5px; }
+    .vsResourceBox { padding:3px 5px; font-size:7px; gap:3px; }
+    .vsResourceBox .vsIcon { font-size:8px; }
+    .vsLifeBar { padding:4px 5px; gap:2px; }
+    .vsCpuLabel { font-size:6px; }
+  }
 </style>
 </head>
 <body>
@@ -502,10 +525,6 @@
   <img class="avatar" src="data:image/jpeg;base64,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" alt="やっさん">
   <div class="gametitle">ZAKUMIRO2</div>
   <div class="title">難易度を選択</div>
-  <div class="opt"><b>1</b>キー : 第一部</div>
-  <div class="opt" id="optVs" style="display:none;"><b>4</b>キー : VS Mode(対CPU)</div>
-  <div class="opt"><b>2</b>キー : 第二部</div>
-  <div class="opt" id="opt3" style="display:none;"><b>3</b>キー : 第三部</div>
   <!-- 第一部とVS Modeは対になる存在として、他の難易度ボタンとは別の行にまとめて中央揃えで並べる -->
   <div id="diffButtonsRow1">
     <button type="button" class="diffbtn" id="diffBtn1">第一部</button>
@@ -2629,6 +2648,7 @@ for (let i=0;i<MAX_HAROS;i++){
     timer: 0,
     startX:0, startZ:0, targetX:0, targetZ:0, flightT:0, flightDur:0,
     x:0, y:0, z:0,
+    aimAtCpu:false, // VS Mode専用: このハロがプレイヤーではなくCPUを狙って出現したものかどうか
     mesh: createHaroMesh(),
     shadowMesh: createHaroShadow()
   });
@@ -2702,10 +2722,12 @@ function updatePart2TeaseBanner(dt){
 const tutorialHintEl = document.getElementById('tutorialHint');
 const TUTORIAL_STEP4_DURATION = 20.0;
 const TUTORIAL_INTRO_DURATION = 10.0; // メッセージ0(導入)の最大表示時間。これが経過するか何らかの操作をすると次へ進む
+const VS_INTRO_DURATION = 5.0; // VS Mode専用導入メッセージの最大表示時間
 let tutorialActive = false; // このプレイでチュートリアルが有効かどうか(startGame()で確定する)
 let tutorialPhase4Timer = -1;
 let tutorialIntroActive = false; // メッセージ0(導入)表示中かどうか。この間はpaused=trueにしてゲームを停止させる
 let tutorialIntroTimer = 0;
+let tutorialIntroDuration = TUTORIAL_INTRO_DURATION; // 通常は10秒、VS Modeの導入メッセージのみ5秒にする
 function showTutorialHint(text){
   tutorialHintEl.textContent = text;
   tutorialHintEl.style.display = 'block';
@@ -2714,21 +2736,31 @@ function showTutorialHint(text){
 function startTutorialIntro(){
   tutorialIntroActive = true;
   tutorialIntroTimer = 0;
+  tutorialIntroDuration = TUTORIAL_INTRO_DURATION;
   paused = true; // 10秒経過 or 何らかの操作があるまでゲームを停止させる(演出上の「一時停止」であり、通常のポーズUIは出さない)
   showTutorialHint('👴🏾私はヤッサン・ウソツキー博士だ。このシミュレーターで君に新モビル兵器の機能テストをしてもらいたい');
 }
-// 導入メッセージを終了し、通常の一時停止解除と共にステップ1以降の判定へ進む(10秒経過、またはいずれかの操作で呼ばれる)
+// VS Mode専用の導入メッセージ。仕組みはメッセージ0と共通(この間ゲームを停止させ、5秒経過か何らかの操作で終了する)だが、
+// ステップ1〜4のような多段階の判定は行わない一回きりのメッセージにする
+function startVsIntro(){
+  tutorialIntroActive = true;
+  tutorialIntroTimer = 0;
+  tutorialIntroDuration = VS_INTRO_DURATION;
+  paused = true;
+  showTutorialHint('👴🏾相手より早く物資ボックスを集めたら勝ちじゃ');
+}
+// 導入メッセージを終了し、通常の一時停止解除と共にステップ1以降の判定へ進む(表示時間の経過、またはいずれかの操作で呼ばれる)
 function endTutorialIntro(){
   if (!tutorialIntroActive) return;
   tutorialIntroActive = false;
   paused = false;
 }
-// メッセージ0(導入)の10秒タイマーは、ゲームがpaused中でも進める必要があるため、
+// メッセージ0(導入)・VS Mode導入メッセージのタイマーは、ゲームがpaused中でも進める必要があるため、
 // 通常のupdate系関数とは別に(pausedによる分岐の外側で)毎フレーム呼び出す
 function updateTutorialIntro(dt){
   if (!tutorialIntroActive) return;
   tutorialIntroTimer += dt;
-  if (tutorialIntroTimer >= TUTORIAL_INTRO_DURATION) endTutorialIntro();
+  if (tutorialIntroTimer >= tutorialIntroDuration) endTutorialIntro();
 }
 // 各ステップの完了判定は、対応するトロフィーが今回のプレイで既に獲得済みかどうかで行う(達成タイミングと完全に一致するため)
 function updateTutorial(dt){
@@ -3017,9 +3049,7 @@ function unlockVsMode(){
 }
 
 function updateDifficultyUI(){
-  document.getElementById('opt3').style.display = part3Unlocked ? 'block' : 'none';
   document.getElementById('diffBtn3').style.display = part3Unlocked ? 'block' : 'none';
-  document.getElementById('optVs').style.display = vsModeUnlocked ? 'block' : 'none';
   document.getElementById('diffBtnVs').style.display = vsModeUnlocked ? 'block' : 'none';
 }
 updateDifficultyUI(); // 前回までに解禁済みなら、起動時から第三部・VS Modeボタンを表示する
@@ -3084,6 +3114,7 @@ function applyWorldScale(diff){
 }
 let currentRateStep = SKULL_RATE_STEP_LV1;
 let awaitingDifficulty = true;
+let lastPlayedDiffButtonId = 'diffBtn1'; // 起動画面に戻った際、直前にプレイしていたモードのボタンへフォーカスするために記録する
 let invincibleMode = false; // デバッグ用無敵モード(難易度ボタンを3秒以上長押ししてから離すと発動)。落下・ドクロ/敵ザクの接触が無効になる
 
 // ============================================================
@@ -3637,6 +3668,7 @@ function updateHiddenAura(dt){
 }
 
 function startGame(diff, invincible, vs){
+  lastPlayedDiffButtonId = vs ? 'diffBtnVs' : ('diffBtn'+diff); // 起動画面に戻った際のフォーカス先として記録しておく
   vsMode = !!vs; // VS Modeはdiff=1(第一部)のステージ設定を土台にしつつ、随所でvsModeを見て挙動を分岐する
   skyMode = (skyMode === 'space') ? 'gradient' : 'space'; // プレイのたびに背景を交互に切り替える
   applySkyMode();
@@ -3650,10 +3682,11 @@ function startGame(diff, invincible, vs){
   updatePlayerAppearance(); // ボディ色を即座に反映する(これが無いと前回のプレイの色が被弾など別の更新契機まで残ってしまう)
   cameraAutoRotate = document.getElementById('autoRotateCheck').checked; // 難易度選択画面のチェックボックスを反映(デフォルトはオン)
   soundEnabled = document.getElementById('soundEnabledCheck').checked; // 同じくチェックボックスを反映(デフォルトはオン)
-  tutorialActive = !vsMode && diff === 1 && document.getElementById('tutorialCheck').checked; // VS Modeではチュートリアルを出さない
+  tutorialActive = !vsMode && diff === 1 && document.getElementById('tutorialCheck').checked; // VS Modeでは通常のチュートリアル(ステップ1〜4)は出さない
   tutorialPhase4Timer = -1;
   tutorialHintEl.style.display = 'none';
-  if (tutorialActive) startTutorialIntro(); // ウソツキー博士の導入メッセージ(メッセージ0)を表示し、その間ゲームを停止させる
+  if (vsMode) startVsIntro(); // VS Mode専用の短い導入メッセージ(5秒)を表示し、その間ゲームを停止させる
+  else if (tutorialActive) startTutorialIntro(); // ウソツキー博士の導入メッセージ(メッセージ0)を表示し、その間ゲームを停止させる
   awaitingDifficulty = false;
   difficultyEl.style.display = 'none';
   elapsedTime = 0;
@@ -3776,6 +3809,7 @@ function resetGame(){
 
   awaitingDifficulty = true;
   difficultyEl.style.display = 'flex';
+  document.getElementById(lastPlayedDiffButtonId).focus(); // 直前にプレイしていたモードのボタンへフォーカスする(非表示のボタンなら何も起きない)
   demoActive = false;
   titleIdleTimer = 0;
   demoLabelEl.style.display = 'none';
@@ -5491,25 +5525,34 @@ function haroShouldFreeze(){
   if (!vsMode) return theWorldActive;
   return (theWorldActive || cpu.worldActive) && !(theWorldActive && cpu.worldActive);
 }
+let haroSpawnToggle = 0; // VS Mode専用: 2回に1回はプレイヤーではなくCPUを狙って出現させる(交互に切り替える)
 function updateHaroSlot(s, dt){
   if (s.phase === 'idle'){
     if (haroShouldFreeze()) return; // ザ・世界中は周期カウンタも停止
     s.timer += dt;
     if (s.timer >= currentHaroCycle()){
       s.timer = 0;
-      // 出現方向は画面奥(カメラから見てキャラクターの向こう側)を中心とした範囲に制限する
-      const screenDeepAngle = camYaw + Math.PI;
+      // VS Modeは2回に1回、プレイヤーではなくCPUを狙う(CPUが物資に気を取られてハロを取りにくいという課題への対応)。
+      // 狙う対象を「基準点」として、出現位置・予測着地点ともプレイヤー狙いと全く同じ計算式をCPU側の座標に適用する
+      const aimAtCpu = vsMode && (haroSpawnToggle++ % 2 === 1);
+      s.aimAtCpu = aimAtCpu;
+      const focusX = aimAtCpu ? cpu.x : pos.x, focusZ = aimAtCpu ? cpu.z : pos.z;
+      const focusYaw = aimAtCpu ? cpu.yaw : yaw;
+      const focusSpeed = aimAtCpu ? cpu.chargeSpeed : currentSpeed;
+      // 出現方向: プレイヤー狙いは従来通り画面奥(カメラから見て向こう側)を中心にする。
+      // CPU狙いはカメラに依存する意味が無いため、CPU自身の向きの後方を中心にする
+      const screenDeepAngle = (aimAtCpu ? focusYaw : camYaw) + Math.PI;
       const angle = screenDeepAngle + (Math.random()-0.5)*currentHaroSpawnArc();
       const dirX = Math.sin(angle), dirZ = Math.cos(angle);
-      s.startX = pos.x + dirX*curHaroSpawnRadius;
-      s.startZ = pos.z + dirZ*curHaroSpawnRadius;
+      s.startX = focusX + dirX*curHaroSpawnRadius;
+      s.startZ = focusZ + dirZ*curHaroSpawnRadius;
 
-      // プレイヤーの前進速度を加味して通過点を予測補正する(出現地点からの概算飛行時間ぶん、前進方向へ進めた位置を狙う)。
+      // 狙う対象の前進速度を加味して通過点を予測補正する(出現地点からの概算飛行時間ぶん、前進方向へ進めた位置を狙う)。
       // 完全に正確だと避けづらくなるため、ランダムに0〜20mバラつかせて精度を落とす
       const roughFlightDur = Math.min(Math.max(0.01, curHaroSpawnRadius/HARO_SPEED), TARGET_PREDICT_MAX_TIME);
-      const moveDirX = -Math.sin(yaw), moveDirZ = -Math.cos(yaw);
-      const predictedX = pos.x + moveDirX*currentSpeed*roughFlightDur;
-      const predictedZ = pos.z + moveDirZ*currentSpeed*roughFlightDur;
+      const moveDirX = -Math.sin(focusYaw), moveDirZ = -Math.cos(focusYaw);
+      const predictedX = focusX + moveDirX*focusSpeed*roughFlightDur;
+      const predictedZ = focusZ + moveDirZ*focusSpeed*roughFlightDur;
       const scatterAngle = Math.random()*Math.PI*2;
       const scatterDist = Math.random()*20;
       const passX = predictedX + Math.cos(scatterAngle)*scatterDist;
@@ -5540,7 +5583,9 @@ function updateHaroSlot(s, dt){
       const bounceFrac = Math.sin(bouncePhase * Math.PI); // 0(接地)→1(最高点)→0(接地)
       s.y = HARO_RADIUS + (CHAR_HEIGHT - HARO_RADIUS) * bounceFrac;
       s.mesh.position.set(s.x, s.y, s.z);
-      s.mesh.rotation.y = Math.atan2(s.x-pos.x, s.z-pos.z); // 目が常にプレイヤーを向く
+      // 目は狙っている対象(通常はプレイヤー、VS ModeでCPUを狙っている間はCPU)の方を常に向く
+      const eyeTargetX = s.aimAtCpu ? cpu.x : pos.x, eyeTargetZ = s.aimAtCpu ? cpu.z : pos.z;
+      s.mesh.rotation.y = Math.atan2(s.x-eyeTargetX, s.z-eyeTargetZ);
 
       // 地面に当たる瞬間(接地付近)は楕円体状に潰れる(スカッシュ)
       const squash = clamp(1 - bounceFrac/0.15, 0, 1);
@@ -5563,8 +5608,9 @@ function updateHaroSlot(s, dt){
       }
     }
 
-    // プレイヤーから離れすぎたら消滅させ、次のサイクルで新たに出現させる
-    if (Math.hypot(s.x-pos.x, s.z-pos.z) >= curHaroDespawnDistance){
+    // 狙っている対象(通常はプレイヤー、VS ModeでCPUを狙っている間はCPU)から離れすぎたら消滅させ、次のサイクルで新たに出現させる
+    const despawnRefX = s.aimAtCpu ? cpu.x : pos.x, despawnRefZ = s.aimAtCpu ? cpu.z : pos.z;
+    if (Math.hypot(s.x-despawnRefX, s.z-despawnRefZ) >= curHaroDespawnDistance){
       s.phase = 'idle';
       s.mesh.visible = false;
       s.shadowMesh.visible = false;
@@ -5938,6 +5984,8 @@ function startVsMatch(){
   cpu.hp = PLAYER_MAX_LIFE;
   cpu.form = 1; cpu.form2Timer = 0;
   cpu.damageInvincibleTimer = -1;
+  cpuBodyMatNormal.color.setHex(COL_BODY); // 前回の試合で被弾黒変色/破壊したまま残っている可能性があるため、色を必ずリセットする
+  cpuBodyMatForm2.color.setHex(FORM2_COLOR);
   updateCpuAppearance();
   cpu.worldCharged = false; cpu.worldActive = false; cpu.worldTimer = 0; cpu.worldEngageTimer = -1;
   cpu.jojoActive = false; cpu.jojoTimer = 0; cpu.jojoEngageTimer = -1;
@@ -5995,6 +6043,15 @@ function hitCpuWithJojo(){
   } else {
     cpu.hp = Math.max(0, cpu.hp - VS_JOJO_DAMAGE);
     cpu.damageInvincibleTimer = 0;
+    // ダメージを受けたことが分かるよう、無敵時間の間だけ機体を黒く変色させる(updateCpu側で無敵終了時に元の色へ戻す)
+    cpuBodyMatNormal.color.setHex(0x000000);
+    cpuBodyMatForm2.color.setHex(0x000000);
+    if (cpu.hp <= 0){
+      // 破壊(体力ゼロ)の瞬間は黒煙をまとめて吹き出させる(低ライフ時の継続煙エフェクト用の関数を流用し、一度に大量発生させる)
+      for (let i=0;i<14;i++){
+        spawnDamageSmoke(cpu.x+(Math.random()-0.5)*3, cpu.airY+LEG_LEN+TORSO_H*(0.3+Math.random()*0.7), cpu.z+(Math.random()-0.5)*3);
+      }
+    }
   }
   transferVsResource(false);
   checkVsMatchEnd();
@@ -6075,7 +6132,12 @@ function updateCpu(dt){
 
   if (cpu.damageInvincibleTimer >= 0){
     cpu.damageInvincibleTimer += dt;
-    if (cpu.damageInvincibleTimer >= DAMAGE_INVINCIBLE_TIME) cpu.damageInvincibleTimer = -1;
+    if (cpu.damageInvincibleTimer >= DAMAGE_INVINCIBLE_TIME){
+      cpu.damageInvincibleTimer = -1;
+      // 被弾直後の黒い変色を元の色へ戻す(体力が尽きて試合が終わった場合はここに到達せず、黒いまま残る)
+      cpuBodyMatNormal.color.setHex(COL_BODY);
+      cpuBodyMatForm2.color.setHex(FORM2_COLOR);
+    }
   }
   if (cpu.form === 2){
     cpu.form2Timer += dt;
