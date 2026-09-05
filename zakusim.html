@@ -209,14 +209,14 @@
     border-color:rgba(255,140,110,0.75); box-shadow:0 0 14px rgba(255,90,60,0.35);
   }
   .diffbtn.vsmode:active { background:rgba(255,90,60,0.5); }
-  #autoRotateLabel, #soundLabel, #tutorialLabel {
+  #autoRotateLabel, #soundLabel, #tutorialLabel, #classicBgmLabel {
     display:flex; align-items:center; gap:10px; margin-top:clamp(16px,4.5vw,28px);
     font-size:clamp(13px,3.7vw,16px); color:#fff; user-select:none; cursor:pointer;
   }
-  /* 表示順(チュートリアル→音あり→視点変更)に合わせ、2番目・3番目の項目は詰めた間隔にする */
-  #soundLabel, #autoRotateLabel { margin-top:clamp(10px,2.8vw,14px); }
+  /* 表示順(チュートリアル→音あり→視点変更→BGM切替)に合わせ、2番目以降の項目は詰めた間隔にする */
+  #soundLabel, #autoRotateLabel, #classicBgmLabel { margin-top:clamp(10px,2.8vw,14px); }
   #autoRotateLabel { font-size:clamp(6.5px,1.85vw,8px); } /* 視点変更のみフォントサイズを半分にする */
-  #autoRotateLabel input[type="checkbox"], #soundLabel input[type="checkbox"], #tutorialLabel input[type="checkbox"] { width:20px; height:20px; cursor:pointer; flex-shrink:0; }
+  #autoRotateLabel input[type="checkbox"], #soundLabel input[type="checkbox"], #tutorialLabel input[type="checkbox"], #classicBgmLabel input[type="checkbox"] { width:20px; height:20px; cursor:pointer; flex-shrink:0; }
   #usageLink, #goUsageLink {
     display:inline-block; margin-top:clamp(14px,3.8vw,22px);
     font-family: -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
@@ -400,9 +400,9 @@
     #difficulty .title { font-size:clamp(11px,3.4vh,20px); margin-bottom:clamp(6px,2.4vh,16px); }
     #diffButtons, #diffButtonsRow1 { margin-top:2px; gap:10px; }
     .diffbtn { padding:clamp(6px,1.8vh,10px) clamp(12px,3vh,18px); font-size:clamp(12px,3vh,16px); }
-    #autoRotateLabel, #soundLabel, #tutorialLabel { margin-top:clamp(5px,1.6vh,14px); gap:8px; font-size:clamp(10px,2.6vh,13px); }
+    #autoRotateLabel, #soundLabel, #tutorialLabel, #classicBgmLabel { margin-top:clamp(5px,1.6vh,14px); gap:8px; font-size:clamp(10px,2.6vh,13px); }
     #autoRotateLabel { font-size:clamp(5px,1.3vh,6.5px); } /* 視点変更のみフォントサイズを半分にする */
-    #autoRotateLabel input[type="checkbox"], #soundLabel input[type="checkbox"], #tutorialLabel input[type="checkbox"] { width:16px; height:16px; }
+    #autoRotateLabel input[type="checkbox"], #soundLabel input[type="checkbox"], #tutorialLabel input[type="checkbox"], #classicBgmLabel input[type="checkbox"] { width:16px; height:16px; }
     #usageLink { margin-top:clamp(5px,1.6vh,10px); font-size:clamp(10px,2.4vh,12px); }
     #difficulty .credit, #gameover .credit { bottom:4px; font-size:9px; }
 
@@ -545,6 +545,10 @@
   <label id="autoRotateLabel">
     <input type="checkbox" id="autoRotateCheck" checked>
     視界自動回転(常に背中を見る)
+  </label>
+  <label id="classicBgmLabel">
+    <input type="checkbox" id="classicBgmCheck">
+    クラシックBGM(旧サウンド)にする
   </label>
   <a id="usageLink" href="https://zakusim2g.vercel.app/usage.html" target="_blank" rel="noopener">📖 遊び方を見る</a>
   <br>
@@ -2502,17 +2506,33 @@ const BGM_MELODY_PATTERN = [
 let bgmGain = null;
 let bgmTimerId = null;
 let bgmStep = 0;
+// ---- BGM音源の切り替え(既定は新しいMP3音源。難易度選択画面のチェックボックスで従来のチップチューン生成音源に戻せる) ----
+let useClassicBgm = false; // startGame()で難易度選択画面のチェックボックスから読み込む
+const BGM_MP3_VOLUME = 0.5;
+const bgmAudioEl = new Audio();
+bgmAudioEl.preload = 'none'; // 選択されるまで読み込まない(5MB超のファイルのため)
+bgmAudioEl.loop = true;
+bgmAudioEl.src = 'bgm/action-battle.mp3';
 function startBGM(){
-  if (!soundEnabled || !audioCtx || bgmGain) return;
-  bgmGain = audioCtx.createGain();
-  bgmGain.gain.value = BGM_VOLUME;
-  bgmGain.connect(audioCtx.destination);
-  bgmStep = 0;
-  scheduleBGMStep();
+  if (!soundEnabled) return;
+  if (useClassicBgm){
+    if (!audioCtx || bgmGain) return;
+    bgmGain = audioCtx.createGain();
+    bgmGain.gain.value = BGM_VOLUME;
+    bgmGain.connect(audioCtx.destination);
+    bgmStep = 0;
+    scheduleBGMStep();
+  } else {
+    bgmAudioEl.volume = BGM_MP3_VOLUME;
+    bgmAudioEl.currentTime = 0; // チップチューン版と同様、毎回曲頭から再生し直す
+    bgmAudioEl.play().catch(()=>{}); // ブラウザの自動再生制限で拒否された場合は無視する(ensureAudio()と同じくユーザー操作後に呼ばれる想定)
+  }
 }
 function stopBGM(){
+  // 設定を切り替えた直後などで、どちらの音源が鳴っていても確実に止まるよう両方止める
   if (bgmTimerId !== null){ clearTimeout(bgmTimerId); bgmTimerId = null; }
   if (bgmGain){ bgmGain.disconnect(); bgmGain = null; }
+  bgmAudioEl.pause();
 }
 function scheduleBGMStep(){
   if (!audioCtx || !bgmGain) return;
@@ -3682,17 +3702,20 @@ function startGame(diff, invincible, vs){
   updatePlayerAppearance(); // ボディ色を即座に反映する(これが無いと前回のプレイの色が被弾など別の更新契機まで残ってしまう)
   cameraAutoRotate = document.getElementById('autoRotateCheck').checked; // 難易度選択画面のチェックボックスを反映(デフォルトはオン)
   soundEnabled = document.getElementById('soundEnabledCheck').checked; // 同じくチェックボックスを反映(デフォルトはオン)
+  useClassicBgm = document.getElementById('classicBgmCheck').checked; // BGM音源(既定は新曲のMP3、チェックで従来のチップチューン生成音源に戻す)
   tutorialActive = !vsMode && diff === 1 && document.getElementById('tutorialCheck').checked; // VS Modeでは通常のチュートリアル(ステップ1〜4)は出さない
   tutorialPhase4Timer = -1;
   tutorialHintEl.style.display = 'none';
-  if (vsMode) startVsIntro(); // VS Mode専用の短い導入メッセージ(5秒)を表示し、その間ゲームを停止させる
-  else if (tutorialActive) startTutorialIntro(); // ウソツキー博士の導入メッセージ(メッセージ0)を表示し、その間ゲームを停止させる
+  if (!vsMode && tutorialActive) startTutorialIntro(); // ウソツキー博士の導入メッセージ(メッセージ0)を表示し、その間ゲームを停止させる
   awaitingDifficulty = false;
   difficultyEl.style.display = 'none';
   elapsedTime = 0;
   distanceTraveled = 0;
   if (vsMode){
     startVsMatch(); // ドクロは湧かせず、代わりにCPU・VS用HUDを初期化する(詳細は「VS Mode」節を参照)
+    // 自機・CPUの開始位置を決めるstartVsMatch()の「後」に呼ぶ必要がある(先に呼ぶと、導入メッセージで停止している間
+    // 自機がまだ中央(resetGame直後の初期位置)にいるように見えてしまうバグがあった)
+    startVsIntro(); // VS Mode専用の短い導入メッセージ(5秒)を表示し、その間ゲームを停止させる
   } else {
     skulls[0].activated = true;
     scheduleNextSkull(skulls[0]);
@@ -5525,16 +5548,16 @@ function haroShouldFreeze(){
   if (!vsMode) return theWorldActive;
   return (theWorldActive || cpu.worldActive) && !(theWorldActive && cpu.worldActive);
 }
-let haroSpawnToggle = 0; // VS Mode専用: 2回に1回はプレイヤーではなくCPUを狙って出現させる(交互に切り替える)
 function updateHaroSlot(s, dt){
   if (s.phase === 'idle'){
     if (haroShouldFreeze()) return; // ザ・世界中は周期カウンタも停止
     s.timer += dt;
     if (s.timer >= currentHaroCycle()){
       s.timer = 0;
-      // VS Modeは2回に1回、プレイヤーではなくCPUを狙う(CPUが物資に気を取られてハロを取りにくいという課題への対応)。
-      // 狙う対象を「基準点」として、出現位置・予測着地点ともプレイヤー狙いと全く同じ計算式をCPU側の座標に適用する
-      const aimAtCpu = vsMode && (haroSpawnToggle++ % 2 === 1);
+      // VS Modeは常に2体(スロット0・1)を同時出現させ、スロット0は常にプレイヤーを、スロット1は常にCPUを狙う
+      // (CPUが物資に気を取られてハロを取りにくいという課題への対応)。狙う対象を「基準点」として、
+      // 出現位置・予測着地点ともプレイヤー狙いと全く同じ計算式をCPU側の座標に適用する
+      const aimAtCpu = vsMode && s.slotIndex === 1;
       s.aimAtCpu = aimAtCpu;
       const focusX = aimAtCpu ? cpu.x : pos.x, focusZ = aimAtCpu ? cpu.z : pos.z;
       const focusYaw = aimAtCpu ? cpu.yaw : yaw;
@@ -5658,8 +5681,8 @@ function updateHaroSlot(s, dt){
 }
 function updateHaro(dt){
   if (state === 'victory') return; // ラスボス撃破演出中は完全に停止
-  // 通常は1体だけ出現し続けるが、ラスボス出現中は最大3体まで同時に出現できるようにする
-  const activeCount = bossActive ? MAX_HAROS : 1;
+  // 通常は1体だけ出現し続けるが、ラスボス出現中は最大3体、VS Modeは常に2体(プレイヤー狙い・CPU狙い1体ずつ)同時に出現させる
+  const activeCount = bossActive ? MAX_HAROS : (vsMode ? 2 : 1);
   for (let i=0;i<haros.length;i++){
     const s = haros[i];
     if (i >= activeCount){
@@ -6121,6 +6144,16 @@ function findNearestAliveBlock(fromX, fromZ){
   }
   return nearest;
 }
+// 現在飛行中のハロのうち、最も近いものを探す(CPUがザ・世界未使用可能な間、積極的に追いかけるために使う)
+function findNearestFlyingHaro(fromX, fromZ){
+  let nearest = null, nearestDist = Infinity;
+  for (const s of haros){
+    if (s.phase !== 'flying') continue;
+    const d = Math.hypot(s.x-fromX, s.z-fromZ);
+    if (d < nearestDist){ nearestDist = d; nearest = s; }
+  }
+  return nearest;
+}
 
 // CPUの毎フレーム処理。移動(物資へ直進)・ジョジョ立ち判定・ザ・世界の発動と経過・盤外復帰をまとめて行う
 function updateCpu(dt){
@@ -6170,50 +6203,68 @@ function updateCpu(dt){
     if (cpu.jojoTimer >= CPU_JOJO_POSE_TIME) cpu.jojoActive = false;
     cpu.chargeSpeed = 0;
   } else {
-    // 移動: 一番近い生存中の物資ブロックへまっすぐ向かう。物資ブロックは全て地上20m(高所は35m)に浮いているため、
-    // プレイヤーと同じくジャンプしないと取得できない。高所ブロック(QBLOCK_HIGH_EXTRA_Y分高い)は単発ジャンプでは
-    // 届かない高さのため、頂点に達した時点で2段ジャンプする(プレイヤーの多段ジャンプ相当)
-    const target = findNearestAliveBlock(cpu.x, cpu.z);
-    if (target){
-      const dx = target.x-cpu.x, dz = target.z-cpu.z;
-      const dist = Math.hypot(dx, dz);
-      if (dist > 0.5){
-        cpu.yaw = Math.atan2(-dx, -dz); // プレイヤーの移動積分式(-sin,-cos)と同じ規約に合わせる
+    // ハロが飛んでいて、まだザ・世界が使用可能でなければ、物資より優先して積極的に追いかける(指示通り)。
+    // ハロの命中判定(updateHaroSlot側)は水平距離のみなので、ジャンプはせずそのまま近づくだけでよい
+    const chasedHaro = cpu.worldCharged ? null : findNearestFlyingHaro(cpu.x, cpu.z);
+    if (chasedHaro){
+      const hdx = chasedHaro.x-cpu.x, hdz = chasedHaro.z-cpu.z;
+      const hdist = Math.hypot(hdx, hdz);
+      if (hdist > 0.5){
+        cpu.yaw = Math.atan2(-hdx, -hdz);
         const speed = RUN_SPEED*(cpu.form === 2 ? FORM2_SPEED_MULT : 1);
-        const step = Math.min(dist, speed*dt);
-        cpu.x += (dx/dist)*step;
-        cpu.z += (dz/dist)*step;
+        const step = Math.min(hdist, speed*dt);
+        cpu.x += (hdx/hdist)*step;
+        cpu.z += (hdz/hdist)*step;
         cpu.chargeSpeed = speed;
       } else {
         cpu.chargeSpeed = 0;
       }
-      const withinReach = dist <= QBLOCK_SIZE*0.6; // プレイヤー側の判定を簡略化した円形の到達判定(水平方向)
-      // ブロック直下まで来て、まだ地上にいるならジャンプを開始する
-      if (withinReach && cpu.airY === 0 && cpu.jumpsUsed === 0){
-        cpu.vy = JUMP_V0;
-        cpu.jumpsUsed = 1;
-        cpu.jumpForHighBlock = target.bottomY > QBLOCK_BOTTOM_Y;
-      }
-      // 高所ブロック狙いの場合、1段目の頂点(vyが0以下になった瞬間)で自動的に2段ジャンプする
-      if (cpu.jumpForHighBlock && cpu.jumpsUsed === 1 && cpu.vy <= 0){
-        cpu.vy = JUMP_V0;
-        cpu.jumpsUsed = 2;
-      }
-      // 取得判定: プレイヤーのupdateQBlock()と同じく、足元(airY)〜頭頂(airY+CHAR_HEIGHT)とブロックの
-      // 上下範囲(bottomY〜bottomY+QBLOCK_SIZE)が重なっていることを条件にする(地上に立ったままでは届かない)
-      if (withinReach){
-        const headY = cpu.airY + CHAR_HEIGHT;
-        const blockTop = target.bottomY + QBLOCK_SIZE;
-        if (cpu.airY <= blockTop && headY >= target.bottomY){
-          target.alive = false;
-          target.mesh.visible = false;
-          target.shadow.visible = false;
-          triggerCpuForm2();
-          collectVsBlock('cpu');
-        }
-      }
     } else {
-      cpu.chargeSpeed = 0;
+      // 移動: 一番近い生存中の物資ブロックへまっすぐ向かう。物資ブロックは全て地上20m(高所は35m)に浮いているため、
+      // プレイヤーと同じくジャンプしないと取得できない。高所ブロック(QBLOCK_HIGH_EXTRA_Y分高い)は単発ジャンプでは
+      // 届かない高さのため、頂点に達した時点で2段ジャンプする(プレイヤーの多段ジャンプ相当)
+      const target = findNearestAliveBlock(cpu.x, cpu.z);
+      if (target){
+        const dx = target.x-cpu.x, dz = target.z-cpu.z;
+        const dist = Math.hypot(dx, dz);
+        if (dist > 0.5){
+          cpu.yaw = Math.atan2(-dx, -dz); // プレイヤーの移動積分式(-sin,-cos)と同じ規約に合わせる
+          const speed = RUN_SPEED*(cpu.form === 2 ? FORM2_SPEED_MULT : 1);
+          const step = Math.min(dist, speed*dt);
+          cpu.x += (dx/dist)*step;
+          cpu.z += (dz/dist)*step;
+          cpu.chargeSpeed = speed;
+        } else {
+          cpu.chargeSpeed = 0;
+        }
+        const withinReach = dist <= QBLOCK_SIZE*0.6; // プレイヤー側の判定を簡略化した円形の到達判定(水平方向)
+        // ブロック直下まで来て、まだ地上にいるならジャンプを開始する
+        if (withinReach && cpu.airY === 0 && cpu.jumpsUsed === 0){
+          cpu.vy = JUMP_V0;
+          cpu.jumpsUsed = 1;
+          cpu.jumpForHighBlock = target.bottomY > QBLOCK_BOTTOM_Y;
+        }
+        // 高所ブロック狙いの場合、1段目の頂点(vyが0以下になった瞬間)で自動的に2段ジャンプする
+        if (cpu.jumpForHighBlock && cpu.jumpsUsed === 1 && cpu.vy <= 0){
+          cpu.vy = JUMP_V0;
+          cpu.jumpsUsed = 2;
+        }
+        // 取得判定: プレイヤーのupdateQBlock()と同じく、足元(airY)〜頭頂(airY+CHAR_HEIGHT)とブロックの
+        // 上下範囲(bottomY〜bottomY+QBLOCK_SIZE)が重なっていることを条件にする(地上に立ったままでは届かない)
+        if (withinReach){
+          const headY = cpu.airY + CHAR_HEIGHT;
+          const blockTop = target.bottomY + QBLOCK_SIZE;
+          if (cpu.airY <= blockTop && headY >= target.bottomY){
+            target.alive = false;
+            target.mesh.visible = false;
+            target.shadow.visible = false;
+            triggerCpuForm2();
+            collectVsBlock('cpu');
+          }
+        }
+      } else {
+        cpu.chargeSpeed = 0;
+      }
     }
 
     // ジョジョ立ちの判定: プレイヤーが射程内に入ったら0.5〜1秒後に発動する(指示通り、狙って振り向いたりはしない)
