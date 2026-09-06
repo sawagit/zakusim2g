@@ -2071,13 +2071,20 @@ function placeQBlocks(){
   }
   qblockTotalCount = count;
   qblocksCollected = 0;
-  // 第二部・第三部限定: 5個目以降(0始まりでindex4以降)からランダムに1個をスペシャルブロックにする
-  const SPECIAL_QBLOCK_MIN_INDEX = 4;
-  if (!vsMode && difficulty !== 1 && count > SPECIAL_QBLOCK_MIN_INDEX){
-    const idx = SPECIAL_QBLOCK_MIN_INDEX + Math.floor(Math.random()*(count-SPECIAL_QBLOCK_MIN_INDEX));
-    qblocks[idx].special = true;
-    qblocks[idx].mesh.material = specialQBlockMat;
-  }
+  // スペシャルブロックは配置時点では選ばない(初期状態では他と見分けが付かないようにする)。
+  // 5個取得した時点で残っているブロックから1個選ぶ(詳細はrevealSpecialQBlock()を参照)
+}
+
+// 第二部・第三部限定: 物資ブロックを5個取得した時点で、まだ残っている(未取得の)ブロックから1個をランダムに選び、
+// スペシャルブロックとして色を変える(取得するまでは見た目以外の変化はなく、実際に取得した瞬間に効果が発動する)
+const SPECIAL_QBLOCK_REVEAL_COUNT = 5;
+function revealSpecialQBlock(){
+  if (vsMode || difficulty === 1) return;
+  const alive = qblocks.filter(b => b.alive);
+  if (alive.length === 0) return;
+  const b = alive[Math.floor(Math.random()*alive.length)];
+  b.special = true;
+  b.mesh.material = theWorldActive ? specialQBlockMatInverted : specialQBlockMat;
 }
 
 // Lv.2限定: 生存中の？ブロックのうち3個をランダムに選び、単発ジャンプでは届かない高さまで引き上げる
@@ -5900,6 +5907,7 @@ function updateQBlock(dt){
       continue;
     }
     qblocksCollected++;
+    if (qblocksCollected === SPECIAL_QBLOCK_REVEAL_COUNT) revealSpecialQBlock(); // 第二部・第三部限定(内部でdifficultyを判定)
     if (qblocksCollected === 1) triggerDigestCapture('first_block'); // ハイライトダイジェスト用
     if (qblocksCollected === qblockLastWarningCount(difficulty)){
       awardTrophy('qblock_9'); // 難易度ごとに定めた「あと一つ」のタイミングで表示する(テキストはqblock_9(あと一つ！！)を流用)
@@ -5917,17 +5925,21 @@ function updateQBlock(dt){
 }
 
 // ---- スペシャルブロックの効果:黒い球体3個が機体の周りを回転し、1秒おきに周囲の敵ザク・ドクロを自動撃破する ----
-const SPECIAL_BUFF_DURATION = 20.0;
+const SPECIAL_BUFF_DURATION = 30.0;
 const SPECIAL_BUFF_WARNING_TIME = 3.0;  // この秒数を切ると球体が点滅し始め、終了と同時に消える
 const SPECIAL_BUFF_ORB_COUNT = 3;
 const SPECIAL_BUFF_LASER_INTERVAL = 1.0;
 const SPECIAL_BUFF_RANGE = 40.0;        // この水平距離以内の敵ザク・ドクロだけを対象にする
 const SPECIAL_BUFF_ORB_RADIUS = 1.6;
-const SPECIAL_BUFF_ORBIT_RADIUS = 13.5; // 機体中心からの回転半径(当初4.5mから3倍に拡大)
+const SPECIAL_BUFF_ORBIT_RADIUS = 27.0; // 機体中心からの回転半径(当初4.5m→13.5m→さらに倍の27mに拡大)
 const SPECIAL_BUFF_ORBIT_HEIGHT = CHAR_HEIGHT + 2.0; // 頭上(全高17mより2m上)を旋回するようにする
 const SPECIAL_BUFF_ORBIT_SPEED = 2.5;   // rad/s
+const SPECIAL_BUFF_WOBBLE_R_AMP = 3.0;  // 回転半径のゆらぎの振幅(m)
+const SPECIAL_BUFF_WOBBLE_R_FREQ = 1.3; // 回転角速度に対する半径ゆらぎの周波数比
+const SPECIAL_BUFF_WOBBLE_Y_AMP = 2.0;  // 上下のゆらぎの振幅(m)
+const SPECIAL_BUFF_WOBBLE_Y_FREQ = 0.9; // 回転角速度に対する上下ゆらぎの周波数比
 const SPECIAL_BUFF_BLINK_PERIOD = 0.15;
-const SPECIAL_BUFF_LASER_COLOR = 0x9b30ff;
+const SPECIAL_BUFF_LASER_COLOR = 0x33ff55; // 発光グリーン
 const specialBuffOrbMat = new THREE.MeshStandardMaterial({ color:0x0a0a0a, metalness:0.7, roughness:0.25, emissive:0x2a0a3d, emissiveIntensity:0.6 });
 const specialBuffOrbs = [];
 for (let i=0;i<SPECIAL_BUFF_ORB_COUNT;i++){
@@ -5985,17 +5997,28 @@ function fireSpecialBuffLasers(){
   }
 }
 function updateSpecialBuff(dt){
-  if (specialBuffTimer < 0) return;
-  // プレイヤー自身のザ・世界発動中も、裏技のオーラと同様にこの効果は止めない(敵は静止したまま撃破され続ける)
-  specialBuffTimer += dt;
+  if (invincibleMode){
+    // 無敵モード中は確認しやすいよう、取得の有無に関わらず常に球体を出しっぱなしにする(自動終了・点滅警告もしない)
+    if (specialBuffTimer < 0) activateSpecialBuff();
+    specialBuffTimer = 0;
+  } else if (specialBuffTimer < 0){
+    return;
+  } else {
+    // プレイヤー自身のザ・世界発動中も、裏技のオーラと同様にこの効果は止めない(敵は静止したまま撃破され続ける)
+    specialBuffTimer += dt;
+  }
   specialBuffOrbitAngle += SPECIAL_BUFF_ORBIT_SPEED*dt;
   const cy = airY + SPECIAL_BUFF_ORBIT_HEIGHT;
   for (let i=0;i<SPECIAL_BUFF_ORB_COUNT;i++){
     const angle = specialBuffOrbitAngle + i*(Math.PI*2/SPECIAL_BUFF_ORB_COUNT);
-    specialBuffOrbs[i].position.set(pos.x+Math.cos(angle)*SPECIAL_BUFF_ORBIT_RADIUS, cy, pos.z+Math.sin(angle)*SPECIAL_BUFF_ORBIT_RADIUS);
+    // 単調な円軌道にならないよう、半径・高さともサイン波で緩くゆらす(球体ごとに位相をずらして揃って動かないようにする)
+    const wobbleR = Math.sin(specialBuffOrbitAngle*SPECIAL_BUFF_WOBBLE_R_FREQ + i*2.1) * SPECIAL_BUFF_WOBBLE_R_AMP;
+    const wobbleY = Math.sin(specialBuffOrbitAngle*SPECIAL_BUFF_WOBBLE_Y_FREQ + i*1.7) * SPECIAL_BUFF_WOBBLE_Y_AMP;
+    const r = SPECIAL_BUFF_ORBIT_RADIUS + wobbleR;
+    specialBuffOrbs[i].position.set(pos.x+Math.cos(angle)*r, cy+wobbleY, pos.z+Math.sin(angle)*r);
   }
   const remaining = SPECIAL_BUFF_DURATION - specialBuffTimer;
-  if (remaining <= SPECIAL_BUFF_WARNING_TIME){
+  if (!invincibleMode && remaining <= SPECIAL_BUFF_WARNING_TIME){
     const blinkOn = Math.floor(specialBuffTimer / SPECIAL_BUFF_BLINK_PERIOD) % 2 === 0;
     specialBuffOrbs.forEach(m => { m.visible = blinkOn; });
   }
@@ -6004,7 +6027,7 @@ function updateSpecialBuff(dt){
     specialBuffLaserTimer -= SPECIAL_BUFF_LASER_INTERVAL;
     fireSpecialBuffLasers();
   }
-  if (specialBuffTimer >= SPECIAL_BUFF_DURATION) deactivateSpecialBuff();
+  if (!invincibleMode && specialBuffTimer >= SPECIAL_BUFF_DURATION) deactivateSpecialBuff();
 }
 
 // ネガポジ反転させる、プレイヤー・UI以外のワールドオブジェクトの素材(色は元の16進数値を保持し反転/復元する)
