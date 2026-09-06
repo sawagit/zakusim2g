@@ -1476,12 +1476,12 @@ const groundSolidPiece = createGroundPiece(GROUND_SIZE, GROUND_SIZE, 0, 0);
 groundSolidPiece.mesh.visible = false;
 
 // ---- 床のパネルタイル(格子模様の上に重ねて表示する、3種類の画像を指定比率で敷き詰める) ----
-// tile_base.png(80%)を基本とし、tile2.png・tile.png(各10%)をアクセントとして25m四方のタイルを敷き詰める
-const FLOOR_TILE_SIZE = 25;
+// tile.png(90%)を基本とし、tile_base.png・tile2.png(各5%)をアクセントとして100m四方のタイルを敷き詰める
+const FLOOR_TILE_SIZE = 100;
 const FLOOR_TILE_SPECS = [
-  { file:'img/tile_base.png', weight:0.8 },
-  { file:'img/tile2.png',     weight:0.1 },
-  { file:'img/tile.png',      weight:0.1 }
+  { file:'img/tile_base.png', weight:0.05 },
+  { file:'img/tile2.png',     weight:0.05 },
+  { file:'img/tile.png',      weight:0.9 }
 ];
 let floorTilesReady = false;
 const floorTilePieces = { slit:[], solid:[] }; // applyWorldScale()からの表示切り替え対象
