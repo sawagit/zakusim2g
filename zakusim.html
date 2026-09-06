@@ -2145,6 +2145,40 @@ function updateBoss(dt){
   // ラスボスブロックの撃破判定はタッチ(接触)ではなく、ジョジョ立ちのヒット判定で行う(詳細はpressJojoを参照)
 }
 
+// ---- 撃破後の演出: その場で即爆発するのではなく、煙を出しながら地面まで落下してから爆発する ----
+const BOSS_DEFEAT_FALL_SPEED = 25.0;      // m/s(落下速度)
+const BOSS_DEFEAT_SMOKE_INTERVAL = 0.06;  // この間隔で煙を発生させ続ける
+let bossDefeatFalling = false;
+let bossDefeatX = 0, bossDefeatZ = 0, bossDefeatY = 0;
+let bossDefeatSmokeTimer = 0;
+function startBossDefeatFall(){
+  bossDefeatFalling = true;
+  bossDefeatX = bossX; bossDefeatZ = bossZ; bossDefeatY = currentBossY();
+  bossDefeatSmokeTimer = 0;
+  bossShadowMesh.visible = false; // 周回中の影(半径基準の位置更新)はもう合わないため、落下中は非表示にする
+}
+function updateBossDefeatFall(dt){
+  if (!bossDefeatFalling) return;
+  bossDefeatY -= BOSS_DEFEAT_FALL_SPEED*dt;
+  bossMesh.position.set(bossDefeatX, Math.max(0, bossDefeatY), bossDefeatZ);
+  bossDefeatSmokeTimer += dt;
+  if (bossDefeatSmokeTimer >= BOSS_DEFEAT_SMOKE_INTERVAL){
+    bossDefeatSmokeTimer = 0;
+    // 機体のまわりに黒煙を撒き散らしながら落ちていく(低ライフ時の継続煙エフェクト用の関数を流用)
+    spawnDamageSmoke(
+      bossDefeatX + (Math.random()-0.5)*BOSS_SIZE*bossSizeMult,
+      Math.max(0, bossDefeatY) + (Math.random()-0.5)*BOSS_SIZE*bossSizeMult*0.5,
+      bossDefeatZ + (Math.random()-0.5)*BOSS_SIZE*bossSizeMult
+    );
+  }
+  if (bossDefeatY <= 0){
+    bossDefeatFalling = false;
+    bossMesh.visible = false;
+    spawnExplosion(bossDefeatX, 0, bossDefeatZ, { count:24 }); // 最後は通常より派手な爆発にする
+    playExplosionSound();
+  }
+}
+
 let victoryPoseIndex = 0; // クリア演出のジョジョ立ちポーズ番号(triggerVictory()のたびに3種類からランダムに選び直す)
 function triggerVictory(){
   triggerDigestCapture('boss_defeat'); // ハイライトダイジェスト用(詳細は「ハイライトダイジェスト」節を参照)
@@ -2155,11 +2189,8 @@ function triggerVictory(){
   if (difficulty === 1) pendingPart2TeaseMessage = true; // 次にタイトル画面へ戻ったタイミングで一度だけメッセージを出す
   if (difficulty === 1) unlockVsMode(); // 第一部クリアでVS Modeを解禁する(triggerVictory()はVS Mode中は呼ばれないため、ここでのdifficulty===1は必ず通常プレイの第一部を指す)
   if (difficulty === 2) unlockPart3(); // 第二部クリアで第三部を解禁する
-  spawnExplosion(bossX, currentBossY(), bossZ);
-  playExplosionSound();
   bossActive = false;
-  bossMesh.visible = false;
-  bossShadowMesh.visible = false;
+  startBossDefeatFall(); // 即座に爆発させず、煙を出しながら落下させてから爆発させる(updateBossDefeatFallで処理)
   state = 'victory';
   inAir = false;
   victoryTimer = 0;
@@ -2514,9 +2545,36 @@ function ensureAudio(){
   if (!audioCtx){
     const AC = window.AudioContext || window.webkitAudioContext;
     if (AC) audioCtx = new AC();
+    // 実音声ファイルの効果音は、AudioContextができた最初のタイミングで読み込みを開始しておく
+    // (実際に鳴らす瞬間になってから読み込み始めると、初回だけ間に合わず無音になることがあるため)
+    if (audioCtx){ loadSoundEffectBuffer('sfx/jojo-hit.mp3'); loadSoundEffectBuffer('sfx/time-stop.mp3'); }
   }
   if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
 }
+// ---- 実音声ファイルによる効果音(ジョジョ立ち・ザ・世界発動)。AudioContextでデコード済みのAudioBufferとして持ち、
+// 再生のたびに新しいAudioBufferSourceNodeを作ることで、プレイヤー・CPU(VS Mode)が同時に鳴らしても重ねて再生できる ----
+const soundEffectBuffers = {}; // url -> AudioBuffer(デコード完了前はundefined、失敗時はnullのまま)
+function loadSoundEffectBuffer(url){
+  if (!audioCtx || soundEffectBuffers[url] !== undefined) return; // 二重リクエスト防止
+  soundEffectBuffers[url] = null;
+  fetch(url).then(res => res.arrayBuffer())
+    .then(data => audioCtx.decodeAudioData(data))
+    .then(buf => { soundEffectBuffers[url] = buf; })
+    .catch(()=>{}); // 通信不調やfile://実行時の制限で失敗しても、単に無音になるだけでゲーム進行には影響しない
+}
+function playSoundEffectFile(url, volume){
+  if (!soundEnabled || !audioCtx) return;
+  const buf = soundEffectBuffers[url];
+  if (!buf) return; // まだ読み込み中(またはundefined)の場合は今回は鳴らさない
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  const gain = audioCtx.createGain();
+  gain.gain.value = volume != null ? volume : 1;
+  src.connect(gain); gain.connect(audioCtx.destination);
+  src.start();
+}
+function playJojoHitSound(){ playSoundEffectFile('sfx/jojo-hit.mp3', 0.8); }
+function playTimeStopSound(){ playSoundEffectFile('sfx/time-stop.mp3', 0.6); }
 function playNoiseBurst(duration, filterType, filterFreq, peakGain){
   if (!audioCtx || !soundEnabled) return;
   const sr = audioCtx.sampleRate;
@@ -2554,7 +2612,6 @@ function playExplosionSound(){
   osc.start(now);
   osc.stop(now+0.4);
 }
-function playBishiSound(){ playNoiseBurst(0.12, 'highpass', 3000, 0.8); }
 function playPowerUpSound(){
   // ハロに当たってフォーム2に変身する瞬間の、上昇音による「パワーアップ」音
   if (!audioCtx || !soundEnabled) return;
@@ -4024,6 +4081,7 @@ function resetGame(){
   placeQBlocks();
 
   bossActive = false;
+  bossDefeatFalling = false; // 撃破後の落下演出の途中でリセットされた場合に備える
   bossMesh.visible = false;
   bossMesh.scale.set(1,1,1);
   bossShadowMesh.visible = false;
@@ -4128,7 +4186,7 @@ function pressJojo(){
   state = 'jojo';
   jojoTimer = 0;
   jojoPoseIndex = (jojoPoseIndex + 1) % JOJO_POSES.length; // 発動のたびに次のポーズへ進む(3種類をループ)
-  playBishiSound();
+  playJojoHitSound();
   if (restarting){
     // 再発動:ニュートラルへ戻してポーズをやり直す
     cur.tiltX=0; cur.tiltZ=0; cur.headYaw=0; cur.bodyYawOffset=0;
@@ -5847,7 +5905,7 @@ function activateTheWorld(){
   invertWorldColors(true);
   if (!vsMode) awardTrophy('first_world'); // VS Modeはトロフィーと非連動の独立モードのため
   else playerVsWorldCount++; // CPUの難易度調整(易しいモード解除)に使う
-  playBishiSound(); // ジョジョ立ちと同じ「ビシッ」という音を鳴らす
+  playTimeStopSound();
   stopBGM();
 }
 
@@ -6460,7 +6518,7 @@ function triggerCpuJojo(){
   cpu.jojoActive = true;
   cpu.jojoTimer = 0;
   cpu.jojoEngageTimer = -1;
-  playBishiSound();
+  playJojoHitSound();
   const fx = -Math.sin(cpu.yaw), fz = -Math.cos(cpu.yaw);
   const cx = cpu.x + fx*JOJO_FORWARD_OFFSET, cz = cpu.z + fz*JOJO_FORWARD_OFFSET;
   const cy = cpu.airY + LEG_LEN + TORSO_H*0.5; // ジャンプ中に発動した場合もその高さでドームを表示する
@@ -6475,7 +6533,7 @@ function activateCpuWorld(){
   cpu.worldCharged = false;
   cpu.worldActive = true;
   cpu.worldTimer = 0;
-  playBishiSound();
+  playTimeStopSound();
   invertWorldColors(true);
   theWorldBannerEl.textContent = 'ザ・世界 発動中!(敵)';
   theWorldBannerEl.style.display = 'block';
@@ -6738,6 +6796,7 @@ function loop(now){
     updateQBlock(dt);
     updateTheWorld(dt);
     updateBoss(dt);
+    updateBossDefeatFall(dt); // ラスボス撃破後、煙を出しながら落下→爆発する演出(state==='victory'の間も進める必要がある)
     updateRadar();
     updateCpu(dt); // VS Mode専用(vsMode===falseなら内部で即return)
     updateVsMatchTimer(dt); // VS Modeの制限時間(100秒)判定
