@@ -2268,7 +2268,7 @@ function updateBossLaser(dt){
   if (bossLaserTimer < BOSS_LASER_INTERVAL) return;
   bossLaserTimer -= BOSS_LASER_INTERVAL;
   const bossHalf = BOSS_SIZE/2*bossSizeMult;
-  const local = new THREE.Vector3(0, -bossHalf*0.4, -(bossHalf + 0.6)); // 中央からボスの全高(bossHalf*2)の20%ぶん下、正面のすぐ外側
+  const local = new THREE.Vector3(0, -bossHalf*0.4 - 3, -(bossHalf + 0.6)); // 中央からボスの全高(bossHalf*2)の20%ぶん下、さらに3m下、正面のすぐ外側
   local.applyAxisAngle(new THREE.Vector3(0,1,0), bossMesh.rotation.y);
   const mx = bossX + local.x, my = currentBossY() + local.y, mz = bossZ + local.z;
   spawnLaserBeam(mx, my, mz, mx, 0, mz, BOSS_LASER_COLOR, 0.4, 0.2);
@@ -5923,8 +5923,8 @@ const SPECIAL_BUFF_ORB_COUNT = 3;
 const SPECIAL_BUFF_LASER_INTERVAL = 1.0;
 const SPECIAL_BUFF_RANGE = 40.0;        // この水平距離以内の敵ザク・ドクロだけを対象にする
 const SPECIAL_BUFF_ORB_RADIUS = 1.6;
-const SPECIAL_BUFF_ORBIT_RADIUS = 4.5;  // 機体中心からの回転半径
-const SPECIAL_BUFF_ORBIT_HEIGHT = 9.0;  // 機体の胴体あたりの高さ(カメラ注視点と同じ)
+const SPECIAL_BUFF_ORBIT_RADIUS = 13.5; // 機体中心からの回転半径(当初4.5mから3倍に拡大)
+const SPECIAL_BUFF_ORBIT_HEIGHT = CHAR_HEIGHT + 2.0; // 頭上(全高17mより2m上)を旋回するようにする
 const SPECIAL_BUFF_ORBIT_SPEED = 2.5;   // rad/s
 const SPECIAL_BUFF_BLINK_PERIOD = 0.15;
 const SPECIAL_BUFF_LASER_COLOR = 0x9b30ff;
@@ -5962,13 +5962,17 @@ function fireSpecialBuffLasers(){
     const d = Math.hypot(s.x-pos.x, s.z-pos.z);
     if (d <= SPECIAL_BUFF_RANGE) targets.push({ type:'skull', ref:s, d, x:s.x, y:s.y, z:s.z });
   }
-  if (targets.length === 0) return;
+  if (targets.length === 0) return; // 周囲に対象が1体もいなければ発射しない
   targets.sort((a,b) => a.d-b.d);
-  const n = Math.min(SPECIAL_BUFF_ORB_COUNT, targets.length);
-  for (let i=0;i<n;i++){
-    const t = targets[i];
+  // 対象が3体に満たない場合も、3つの玉から常に3本同時にレーザーを発射する(近い順の対象を使い回す)。
+  // ただし同じ対象を複数の玉が撃った場合、実際の撃破処理は1回だけ行う(2本目以降は着弾演出のみ)
+  const destroyed = new Set();
+  for (let i=0;i<SPECIAL_BUFF_ORB_COUNT;i++){
+    const t = targets[i % targets.length];
     const orb = specialBuffOrbs[i];
     spawnLaserBeam(orb.position.x, orb.position.y, orb.position.z, t.x, t.y, t.z, SPECIAL_BUFF_LASER_COLOR, 0.25, 0.12);
+    if (destroyed.has(t)) continue;
+    destroyed.add(t);
     spawnExplosion(t.x, t.y, t.z);
     playExplosionSound();
     if (t.type === 'zaku'){
