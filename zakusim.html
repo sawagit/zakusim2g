@@ -1499,11 +1499,12 @@ const FLOOR_TILE_SPECS = [
 let floorTilesReady = false;
 const floorTilePieces = []; // applyWorldScale()からの表示切り替え対象(第二部・第三部でのみ表示する)
 // 写真調の画像テクスチャは.colorの操作だけでは反転できないため、シェーダーに小さな手を加えて
-// 「uInvertが1の間は最終的な色を反転する」機能を持たせたMeshStandardMaterialを作る。
-// canvasへの描き込みは一切行わないため、file://実行時のtainted canvas制約とも無関係(既存のonBeforeCompileの標準的な使い方)
-const floorInvertMaterials = []; // invertWorldColors()から一括でuInvertを切り替えられるよう集めておく
-function createInvertibleFloorMaterial(map){
-  const mat = new THREE.MeshStandardMaterial({ map, roughness:1, metalness:0 });
+// 「uInvertが1の間は最終的な色を反転する」機能を持たせたMeshStandardMaterialを作る(床タイル・ラスボスの
+// テクスチャ張り付けで共用する汎用ヘルパー)。canvasへの描き込みは一切行わないため、file://実行時の
+// tainted canvas制約とも無関係(既存のonBeforeCompileの標準的な使い方)
+const photoInvertMaterials = []; // invertWorldColors()から一括でuInvertを切り替えられるよう集めておく
+function createInvertibleMaterial(map, extraProps){
+  const mat = new THREE.MeshStandardMaterial(Object.assign({ map, roughness:1, metalness:0 }, extraProps));
   const invertUniform = { value:0 };
   mat.userData.invertUniform = invertUniform;
   mat.onBeforeCompile = (shader) => {
@@ -1513,7 +1514,7 @@ function createInvertibleFloorMaterial(map){
       'gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(1.0) - gl_FragColor.rgb, uInvert);\n#include <dithering_fragment>'
     );
   };
-  floorInvertMaterials.push(mat);
+  photoInvertMaterials.push(mat);
   return mat;
 }
 function updateFloorTileVisibility(){
@@ -1536,7 +1537,7 @@ function updateFloorTileVisibility(){
   });
 })();
 function buildFloorTiles(textures){
-  const floorMats = textures.map(tex => createInvertibleFloorMaterial(tex));
+  const floorMats = textures.map(tex => createInvertibleMaterial(tex));
   const tileGeo = new THREE.PlaneGeometry(FLOOR_TILE_SIZE, FLOOR_TILE_SIZE);
   // 重みの累積値。マス目ごとの乱数がどの区間に入るかでどの柄を使うか決める
   const cumWeights = [];
@@ -2029,7 +2030,6 @@ function applyLv2HighBlocks(){
 // ============================================================
 const BOSS_SIZE = QBLOCK_SIZE;                 // 大きさは？ブロックと同じ(フェーズ2ではこの半分になる)
 const BOSS_Y = QBLOCK_BOTTOM_Y + QBLOCK_SIZE/2; // 高さも？ブロックと同じ
-const BOSS_COLOR = 0xcdb0f6;    // 薄紫
 const BOSS_EYE_COLOR = 0xff2d8f; // ピンク
 const BOSS_ORBIT_RADIUS = 100.0; // エリア中央を中心に半径100mの円を描く
 const BOSS_SPEED = 15.0;         // m/s(フェーズ2ではこの倍になる)
@@ -2058,11 +2058,28 @@ function updateBossAppearBanner(dt){
 function showCongratsBanner(){
   congratsBannerEl.style.display = 'flex';
 }
-const bossBodyMat = new THREE.MeshStandardMaterial({ color:BOSS_COLOR, metalness:0.6, roughness:0.25 });
+// 面ごとに画像を貼り分ける(side.pngは左右で共通、それ以外は面ごとに専用の画像)。
+// BoxGeometryへ6個の配列をそのまま渡すと、面順序[+X,-X,+Y,-Y,+Z,-Z]の通りに自動で割り当てられる。
+// 目(front.png)はローカル-Z側に置く既存のeyeメッシュと同じ向きのため、配列の最後(-Z)に対応させる
+const bossSideTex = new THREE.TextureLoader().load('img/side.png');
+const bossTopTex = new THREE.TextureLoader().load('img/top.png');
+const bossBottomTex = new THREE.TextureLoader().load('img/bottom.png');
+const bossBackTex = new THREE.TextureLoader().load('img/back.png');
+const bossFrontTex = new THREE.TextureLoader().load('img/front.png');
+[bossSideTex, bossTopTex, bossBottomTex, bossBackTex, bossFrontTex].forEach(t => { t.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8); });
+const BOSS_MAT_PROPS = { metalness:0.6, roughness:0.25 };
+const bossFaceMats = [
+  createInvertibleMaterial(bossSideTex, BOSS_MAT_PROPS),   // +X 右側面
+  createInvertibleMaterial(bossSideTex, BOSS_MAT_PROPS),   // -X 左側面
+  createInvertibleMaterial(bossTopTex, BOSS_MAT_PROPS),    // +Y 上面
+  createInvertibleMaterial(bossBottomTex, BOSS_MAT_PROPS), // -Y 下面
+  createInvertibleMaterial(bossBackTex, BOSS_MAT_PROPS),   // +Z 背面
+  createInvertibleMaterial(bossFrontTex, BOSS_MAT_PROPS)   // -Z 前面(目のある側)
+];
 const bossEyeMat = new THREE.MeshStandardMaterial({ color:BOSS_EYE_COLOR, emissive:BOSS_EYE_COLOR, emissiveIntensity:1.4, roughness:0.3 });
 function createBossMesh(){
   const group = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.BoxGeometry(BOSS_SIZE, BOSS_SIZE, BOSS_SIZE), bossBodyMat);
+  const body = new THREE.Mesh(new THREE.BoxGeometry(BOSS_SIZE, BOSS_SIZE, BOSS_SIZE), bossFaceMats);
   group.add(body);
   // ピンクの目(一つ)。前面(ローカル-Z、キャラクターと同じ前方の定義)に配置し、グループごと回転させてプレイヤーの方を向かせる
   const eye = new THREE.Mesh(new THREE.SphereGeometry(BOSS_SIZE*0.16, 20, 16), bossEyeMat);
@@ -2122,10 +2139,10 @@ function updateBossFlash(dt){
   bossFlashTimer += dt;
   const f = clamp(bossFlashTimer/BOSS_FLASH_TIME, 0, 1);
   const bright = 1 - f;
-  bossBodyMat.emissive.setRGB(bright, bright, bright);
+  bossFaceMats.forEach(m => m.emissive.setRGB(bright, bright, bright));
   if (f >= 1){
     bossFlashTimer = -1;
-    bossBodyMat.emissive.setHex(0x000000);
+    bossFaceMats.forEach(m => m.emissive.setHex(0x000000));
   }
 }
 
@@ -4089,7 +4106,7 @@ function resetGame(){
   bossSizeMult = 1.0;
   bossSpeedMult = 1.0;
   bossFlashTimer = -1;
-  bossBodyMat.emissive.setHex(0x000000);
+  bossFaceMats.forEach(m => m.emissive.setHex(0x000000));
   bossAppearBannerEl.style.display = 'none';
   bossAppearBannerTimer = -1;
   congratsBannerEl.style.display = 'none';
@@ -5870,7 +5887,6 @@ const THE_WORLD_INVERT_MAP = [
   { mat: domeMat, orig: 0xcdf3ff },
   { mat: qblockShadowMat, orig: 0x000000 },
   ...haros.map(s => ({ mat: s.shadowMesh.material, orig: 0x000000 })), // ハロの影もスロットごとに独立した素材のため個別に登録する
-  { mat: bossBodyMat, orig: BOSS_COLOR },
   { mat: bossEyeMat, orig: BOSS_EYE_COLOR },
   { mat: bossShadowMat, orig: 0x000000 }
 ];
@@ -5882,7 +5898,7 @@ function invertWorldColors(active){
   groundSolidPiece.mesh.material = active ? groundSolidPiece.materialsInverted : groundSolidPiece.materials;
   const qm = active ? qblockMatInverted : qblockMat;
   qblocks.forEach(b => { if (b.alive) b.mesh.material = qm; });
-  floorInvertMaterials.forEach(m => { m.userData.invertUniform.value = active ? 1 : 0; }); // 床タイル(写真調の柄)もシェーダーで反転する
+  photoInvertMaterials.forEach(m => { m.userData.invertUniform.value = active ? 1 : 0; }); // 床タイル・ラスボス(写真調の柄)もシェーダーで反転する
 }
 
 function currentTheWorldDuration(){
