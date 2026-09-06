@@ -390,10 +390,21 @@
   .qblockReticle {
     position:absolute; transform:translate(-50%,-50%); display:none; flex-direction:column; align-items:center; gap:1px;
     font-family: -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
-    color:#7CFC00; text-shadow:0 0 4px rgba(0,0,0,0.9), 0 0 6px rgba(124,252,0,0.6);
   }
-  .qblockReticle .mark { font-size:100px; font-weight:bold; line-height:1; }
-  .qblockReticle .label { font-size:9px; font-weight:bold; letter-spacing:1px; line-height:1; }
+  /* 線を細く(font-weightを下げる)しつつ、複数段階のtext-shadowを重ねてネオン管のような発光感を出す。
+     芯に近いほど白っぽく明るく、外側にいくほど緑色に滲むようにして光っている見た目にする */
+  .qblockReticle .mark {
+    font-size:100px; font-weight:200; line-height:1; color:#eaffd0;
+    text-shadow:
+      0 0 4px #ffffff,
+      0 0 10px #baff5c,
+      0 0 22px #7CFC00,
+      0 0 40px #4dff00;
+  }
+  .qblockReticle .label {
+    font-size:9px; font-weight:bold; letter-spacing:1px; line-height:1; color:#7CFC00;
+    text-shadow:0 0 4px rgba(0,0,0,0.9), 0 0 6px rgba(124,252,0,0.6);
+  }
   /* 画面外の最も近い物資1つだけを示す方向インジケータ(仕様7)。位置はレーダーの真下に固定し、
      矢印(▶)だけを自機から見た物資の方向(カメラ基準)に応じて回転させる。文字ラベルは回転しない */
   #offscreenTarget {
