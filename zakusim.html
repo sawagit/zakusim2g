@@ -64,7 +64,7 @@
     position:fixed; z-index:25; pointer-events:none; font-size:56px;
     filter: drop-shadow(0 0 8px rgba(255,220,80,0.9)) drop-shadow(0 0 18px rgba(255,170,0,0.75));
     transform:translate(-50%,-50%);
-    transition:left 0.45s ease-in, top 0.45s ease-in, opacity 0.45s ease-in;
+    transition:left 0.9s ease-in, top 0.9s ease-in, opacity 0.9s ease-in;
   }
   /* ---- VS Mode結果画面 ---- */
   #vsResult {
@@ -1986,6 +1986,10 @@ const QBLOCK_FG = 0x2b2b2b; // 物資ブロックに改名したことに合わ�
 const qblockGeo = new THREE.BoxGeometry(QBLOCK_SIZE,QBLOCK_SIZE,QBLOCK_SIZE);
 const qblockMat = new THREE.MeshStandardMaterial({ map:createQBlockTexture(QBLOCK_COLOR, QBLOCK_FG), metalness:0.6, roughness:0.15 });
 const qblockMatInverted = new THREE.MeshStandardMaterial({ map:createQBlockTexture(invertHex(QBLOCK_COLOR), invertHex(QBLOCK_FG)), metalness:0.6, roughness:0.15 });
+// スペシャルブロック(第二部・第三部限定、5個目以降からランダムに1個選ばれる)用の専用の柄。通常と見分けが付くよう黒色地にする
+const SPECIAL_QBLOCK_COLOR = 0x1a1a1a, SPECIAL_QBLOCK_FG = 0x8a2be2;
+const specialQBlockMat = new THREE.MeshStandardMaterial({ map:createQBlockTexture(SPECIAL_QBLOCK_COLOR, SPECIAL_QBLOCK_FG), metalness:0.6, roughness:0.15 });
+const specialQBlockMatInverted = new THREE.MeshStandardMaterial({ map:createQBlockTexture(invertHex(SPECIAL_QBLOCK_COLOR), invertHex(SPECIAL_QBLOCK_FG)), metalness:0.6, roughness:0.15 });
 // 床に落とす影(共通の素材を全ブロックで共有し、ザ・ワールド中の反転も一括で行えるようにする)
 const qblockShadowGeo = new THREE.CircleGeometry(QBLOCK_SIZE*0.6, 32);
 const qblockShadowMat = new THREE.MeshBasicMaterial({ color:0x000000, transparent:true, opacity:0.3, depthWrite:false });
@@ -2002,7 +2006,7 @@ function createQBlockInstance(){
   shadow.position.y = 0.02;
   shadow.visible = false;
   scene.add(shadow);
-  return { x:0, z:0, alive:false, mesh, shadow, bottomY:QBLOCK_BOTTOM_Y };
+  return { x:0, z:0, alive:false, special:false, mesh, shadow, bottomY:QBLOCK_BOTTOM_Y };
 }
 for (let i=0;i<QBLOCK_TARGET_COUNT;i++) qblocks.push(createQBlockInstance());
 
@@ -2039,6 +2043,7 @@ function placeQBlocks(){
   let attempts = 0;
   for (const b of qblocks){
     b.alive = false;
+    b.special = false;
     b.mesh.visible = false;
     b.mesh.material = qblockMat;
     b.shadow.visible = false;
@@ -2066,6 +2071,13 @@ function placeQBlocks(){
   }
   qblockTotalCount = count;
   qblocksCollected = 0;
+  // 第二部・第三部限定: 5個目以降(0始まりでindex4以降)からランダムに1個をスペシャルブロックにする
+  const SPECIAL_QBLOCK_MIN_INDEX = 4;
+  if (!vsMode && difficulty !== 1 && count > SPECIAL_QBLOCK_MIN_INDEX){
+    const idx = SPECIAL_QBLOCK_MIN_INDEX + Math.floor(Math.random()*(count-SPECIAL_QBLOCK_MIN_INDEX));
+    qblocks[idx].special = true;
+    qblocks[idx].mesh.material = specialQBlockMat;
+  }
 }
 
 // Lv.2限定: 生存中の？ブロックのうち3個をランダムに選び、単発ジャンプでは届かない高さまで引き上げる
@@ -2240,6 +2252,30 @@ function updateBossCollision(){
     const ux = dist < 0.001 ? 0 : dx/dist, uz = dist < 0.001 ? 1 : dz/dist; // 中心が完全に重なった場合の保険(+Z方向へ押し出す)
     pos.x = bossX + ux*minDist;
     pos.z = bossZ + uz*minDist;
+  }
+}
+
+// ---- ボスの口からの攻撃(1秒おきに真下へレーザーを発射) ----
+// 口の位置は正面(プレイヤーの方を向いた面)の中央から、高さ方向に20%だけ下がった位置とする。
+// ボスは常にプレイヤーの方を向くよう回転しているため、ローカル座標にその回転(Y軸)を適用して現在のワールド座標を求める
+const BOSS_LASER_INTERVAL = 1.0;
+const BOSS_LASER_COLOR = 0xff2222;
+const BOSS_LASER_HIT_RADIUS = 6.0; // プレイヤーがこの水平距離以内にいると被弾する(狙い撃ちではなく、その場に立っていた場合に当たる仕様)
+let bossLaserTimer = 0;
+function updateBossLaser(dt){
+  if (!bossActive || bossDefeatFalling || theWorldActive) return;
+  bossLaserTimer += dt;
+  if (bossLaserTimer < BOSS_LASER_INTERVAL) return;
+  bossLaserTimer -= BOSS_LASER_INTERVAL;
+  const bossHalf = BOSS_SIZE/2*bossSizeMult;
+  const local = new THREE.Vector3(0, -bossHalf*0.4, -(bossHalf + 0.6)); // 中央からボスの全高(bossHalf*2)の20%ぶん下、正面のすぐ外側
+  local.applyAxisAngle(new THREE.Vector3(0,1,0), bossMesh.rotation.y);
+  const mx = bossX + local.x, my = currentBossY() + local.y, mz = bossZ + local.z;
+  spawnLaserBeam(mx, my, mz, mx, 0, mz, BOSS_LASER_COLOR, 0.4, 0.2);
+  for (let i=0;i<5;i++) spawnDamageSmoke(mx+(Math.random()-0.5)*2, 0.3+Math.random()*1.5, mz+(Math.random()-0.5)*2); // 着弾地点(地面)の煙
+  const hitDist = Math.hypot(pos.x-mx, pos.z-mz);
+  if (hitDist <= BOSS_LASER_HIT_RADIUS){
+    applySkullHit(pos.x, airY+cur.hipY+TORSO_H*0.5, pos.z); // ドクロの直撃と同じダメージ処理(無敵モード・裏技オーラ・フォーム2の扱いも共通)
   }
 }
 
@@ -2624,6 +2660,36 @@ function spawnDamageSmoke(x,y,z){
   scene.add(mesh);
   particles.push({ mesh, vel, age:0, life:1.6+Math.random()*0.8, baseScale, grow:false, rise:true });
 }
+// ---- 一瞬だけ表示される直線状のレーザービーム(スペシャルブロックの球体・ラスボスの口から共用) ----
+// 着弾は瞬時(判定と同時)に行い、このビームはあくまで見た目の演出として少しの間だけ表示してフェードアウトする
+const laserBeams = [];
+function spawnLaserBeam(x1,y1,z1,x2,y2,z2,colorHex,radius,life){
+  const dir = new THREE.Vector3(x2-x1, y2-y1, z2-z1);
+  const len = Math.max(0.01, dir.length());
+  const geo = new THREE.CylinderGeometry(radius, radius, len, 8, 1, true);
+  const c = theWorldActive ? invertHex(colorHex) : colorHex;
+  const mat = new THREE.MeshBasicMaterial({ color:c, transparent:true, opacity:0.9, depthWrite:false, side:THREE.DoubleSide });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set((x1+x2)/2, (y1+y2)/2, (z1+z2)/2);
+  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), dir.clone().normalize());
+  scene.add(mesh);
+  laserBeams.push({ mesh, age:0, life });
+}
+function updateLaserBeams(dt){
+  for (let i=laserBeams.length-1;i>=0;i--){
+    const b = laserBeams[i];
+    b.age += dt;
+    if (b.age >= b.life){
+      scene.remove(b.mesh);
+      b.mesh.geometry.dispose();
+      b.mesh.material.dispose();
+      laserBeams.splice(i,1);
+      continue;
+    }
+    b.mesh.material.opacity = 0.9*(1-b.age/b.life);
+  }
+}
+
 function updateDamageSmoke(dt){
   if (playerLife <= 0 || playerLife > DAMAGE_SMOKE_LIFE_THRESHOLD || state === 'victory') return;
   damageSmokeTimer += dt;
@@ -3011,7 +3077,7 @@ function flyResourceIcon(fromPoint, toEl){
     icon.style.top = (toRect.top + toRect.height/2) + 'px';
     icon.style.opacity = '0.15';
   });
-  setTimeout(() => icon.remove(), 500);
+  setTimeout(() => icon.remove(), 1000); // 見づらいとの指摘を受け飛行時間を2倍(0.45s→0.9s)にしたため、後片付けのタイマーも合わせて延長する
 }
 // プレイヤー・CPUの物資数表示とCPUの体力バーをまとめて更新する
 function updateVsHud(){
@@ -4024,6 +4090,9 @@ function resetGame(){
   hiddenAuraMesh.visible = false;
   characterRoot.scale.setScalar(1);
   cancelJojoHoldTimer();
+
+  deactivateSpecialBuff();
+  bossLaserTimer = 0;
 
   playerForm = 1;
   form2Timer = 0;
@@ -5783,7 +5852,7 @@ function triggerForm2(){
   if (!vsMode) awardTrophy('first_form2'); // VS Modeはトロフィーと非連動の独立モードのため
 }
 
-const FORM2_WARNING_TIME = 5.0;         // 秒。解除される何秒前から警告点滅を始めるか
+const FORM2_WARNING_TIME = 3.0;         // 秒。解除される何秒前から警告点滅を始めるか
 const FORM2_WARNING_BLINK_PERIOD = 0.3; // 点滅の周期(秒)。ピンク⇔元の色を交互に切り替える
 function updateForm2(dt){
   if (playerForm !== 2) return;
@@ -5825,6 +5894,7 @@ function updateQBlock(dt){
     b.mesh.visible = false;
     b.shadow.visible = false;
     triggerForm2();
+    if (b.special) activateSpecialBuff(); // スペシャルブロック限定:20秒間、黒い球体3個が周囲の敵ザク・ドクロをレーザーで自動撃破する
     if (vsMode){
       collectVsBlock('player'); // VS Modeは専用の勝敗・カウント処理に分岐し、トロフィー・ボス出現等の一人用ロジックは一切通らない
       continue;
@@ -5844,6 +5914,93 @@ function updateQBlock(dt){
       awardTrophy('all_blocks');
     }
   }
+}
+
+// ---- スペシャルブロックの効果:黒い球体3個が機体の周りを回転し、1秒おきに周囲の敵ザク・ドクロを自動撃破する ----
+const SPECIAL_BUFF_DURATION = 20.0;
+const SPECIAL_BUFF_WARNING_TIME = 3.0;  // この秒数を切ると球体が点滅し始め、終了と同時に消える
+const SPECIAL_BUFF_ORB_COUNT = 3;
+const SPECIAL_BUFF_LASER_INTERVAL = 1.0;
+const SPECIAL_BUFF_RANGE = 40.0;        // この水平距離以内の敵ザク・ドクロだけを対象にする
+const SPECIAL_BUFF_ORB_RADIUS = 1.6;
+const SPECIAL_BUFF_ORBIT_RADIUS = 4.5;  // 機体中心からの回転半径
+const SPECIAL_BUFF_ORBIT_HEIGHT = 9.0;  // 機体の胴体あたりの高さ(カメラ注視点と同じ)
+const SPECIAL_BUFF_ORBIT_SPEED = 2.5;   // rad/s
+const SPECIAL_BUFF_BLINK_PERIOD = 0.15;
+const SPECIAL_BUFF_LASER_COLOR = 0x9b30ff;
+const specialBuffOrbMat = new THREE.MeshStandardMaterial({ color:0x0a0a0a, metalness:0.7, roughness:0.25, emissive:0x2a0a3d, emissiveIntensity:0.6 });
+const specialBuffOrbs = [];
+for (let i=0;i<SPECIAL_BUFF_ORB_COUNT;i++){
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(SPECIAL_BUFF_ORB_RADIUS, 16, 12), specialBuffOrbMat);
+  mesh.visible = false;
+  scene.add(mesh);
+  specialBuffOrbs.push(mesh);
+}
+let specialBuffTimer = -1; // -1=非アクティブ。0以上で効果発動中(経過秒数)
+let specialBuffLaserTimer = 0;
+let specialBuffOrbitAngle = 0;
+function activateSpecialBuff(){
+  specialBuffTimer = 0;
+  specialBuffLaserTimer = 0;
+  specialBuffOrbitAngle = 0;
+  specialBuffOrbs.forEach(m => { m.visible = true; });
+}
+function deactivateSpecialBuff(){
+  specialBuffTimer = -1;
+  specialBuffOrbs.forEach(m => { m.visible = false; });
+}
+// 周囲(SPECIAL_BUFF_RANGE以内)の敵ザク・ドクロ(飛行/落下中のみ)のうち近い順に、球体の数だけ即座に撃破する。
+// 対象が1体もいなければ何もしない(発射しない)。レーダーの検知等と同様、水平距離のみの簡易判定で十分とする
+function fireSpecialBuffLasers(){
+  const targets = [];
+  for (const z of zakus){
+    const d = Math.hypot(z.x-pos.x, z.z-pos.z);
+    if (d <= SPECIAL_BUFF_RANGE) targets.push({ type:'zaku', ref:z, d, x:z.x, y:zakuWorldY(z), z:z.z });
+  }
+  for (const s of skulls){
+    if (s.phase !== 'flying' && s.phase !== 'falling') continue;
+    const d = Math.hypot(s.x-pos.x, s.z-pos.z);
+    if (d <= SPECIAL_BUFF_RANGE) targets.push({ type:'skull', ref:s, d, x:s.x, y:s.y, z:s.z });
+  }
+  if (targets.length === 0) return;
+  targets.sort((a,b) => a.d-b.d);
+  const n = Math.min(SPECIAL_BUFF_ORB_COUNT, targets.length);
+  for (let i=0;i<n;i++){
+    const t = targets[i];
+    const orb = specialBuffOrbs[i];
+    spawnLaserBeam(orb.position.x, orb.position.y, orb.position.z, t.x, t.y, t.z, SPECIAL_BUFF_LASER_COLOR, 0.25, 0.12);
+    spawnExplosion(t.x, t.y, t.z);
+    playExplosionSound();
+    if (t.type === 'zaku'){
+      const idx = zakus.indexOf(t.ref);
+      if (idx >= 0) removeZaku(idx);
+    } else {
+      resetSkull(t.ref);
+      onSkullDefeated();
+    }
+  }
+}
+function updateSpecialBuff(dt){
+  if (specialBuffTimer < 0) return;
+  // プレイヤー自身のザ・世界発動中も、裏技のオーラと同様にこの効果は止めない(敵は静止したまま撃破され続ける)
+  specialBuffTimer += dt;
+  specialBuffOrbitAngle += SPECIAL_BUFF_ORBIT_SPEED*dt;
+  const cy = airY + SPECIAL_BUFF_ORBIT_HEIGHT;
+  for (let i=0;i<SPECIAL_BUFF_ORB_COUNT;i++){
+    const angle = specialBuffOrbitAngle + i*(Math.PI*2/SPECIAL_BUFF_ORB_COUNT);
+    specialBuffOrbs[i].position.set(pos.x+Math.cos(angle)*SPECIAL_BUFF_ORBIT_RADIUS, cy, pos.z+Math.sin(angle)*SPECIAL_BUFF_ORBIT_RADIUS);
+  }
+  const remaining = SPECIAL_BUFF_DURATION - specialBuffTimer;
+  if (remaining <= SPECIAL_BUFF_WARNING_TIME){
+    const blinkOn = Math.floor(specialBuffTimer / SPECIAL_BUFF_BLINK_PERIOD) % 2 === 0;
+    specialBuffOrbs.forEach(m => { m.visible = blinkOn; });
+  }
+  specialBuffLaserTimer += dt;
+  if (specialBuffLaserTimer >= SPECIAL_BUFF_LASER_INTERVAL){
+    specialBuffLaserTimer -= SPECIAL_BUFF_LASER_INTERVAL;
+    fireSpecialBuffLasers();
+  }
+  if (specialBuffTimer >= SPECIAL_BUFF_DURATION) deactivateSpecialBuff();
 }
 
 // ネガポジ反転させる、プレイヤー・UI以外のワールドオブジェクトの素材(色は元の16進数値を保持し反転/復元する)
@@ -5872,8 +6029,10 @@ function invertWorldColors(active){
   zakuEyeMat.emissive.setHex(active ? invertHex(COL_EYE) : COL_EYE); // 敵ザクの目も発光色を合わせて反転
   groundPieces.forEach(p => { p.mesh.material = active ? p.materialsInverted : p.materials; });
   groundSolidPiece.mesh.material = active ? groundSolidPiece.materialsInverted : groundSolidPiece.materials;
-  const qm = active ? qblockMatInverted : qblockMat;
-  qblocks.forEach(b => { if (b.alive) b.mesh.material = qm; });
+  qblocks.forEach(b => {
+    if (!b.alive) return;
+    b.mesh.material = active ? (b.special ? specialQBlockMatInverted : qblockMatInverted) : (b.special ? specialQBlockMat : qblockMat);
+  });
   photoInvertMaterials.forEach(m => { m.userData.invertUniform.value = active ? 1 : 0; }); // 床タイル・ラスボス(写真調の柄)もシェーダーで反転する
 }
 
@@ -6784,9 +6943,11 @@ function loop(now){
     updateHaro(dt);
     updateForm2(dt);
     updateQBlock(dt);
+    updateSpecialBuff(dt); // スペシャルブロック取得後20秒間の自動迎撃レーザー
     updateTheWorld(dt);
     updateBoss(dt);
     updateBossCollision(); // ボスへの体当たり判定(すり抜け防止)
+    updateBossLaser(dt); // ボスの口からの真下レーザー攻撃
     updateBossDefeatFall(dt); // ラスボス撃破後、煙を出しながら落下→爆発する演出(state==='victory'の間も進める必要がある)
     updateRadar();
     updateCpu(dt); // VS Mode専用(vsMode===falseなら内部で即return)
@@ -6815,6 +6976,7 @@ function loop(now){
   }
   if (!paused){
     updateParticles(dt);
+    updateLaserBeams(dt);
     updateJojoDome(dt);
     updateSkullBlast(dt);
     updateTrophyToast(dt);
