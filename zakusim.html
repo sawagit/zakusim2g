@@ -1475,6 +1475,82 @@ const groundPieces = [
 const groundSolidPiece = createGroundPiece(GROUND_SIZE, GROUND_SIZE, 0, 0);
 groundSolidPiece.mesh.visible = false;
 
+// ---- 床のパネルタイル(格子模様の上に重ねて表示する、任意画像アトラスからの切り出し柄) ----
+// tile.jpgは3×3のSFパネル柄アトラス画像。中央上のマスをベース(全体の約80%)、右上・中央・左下の
+// 3マスをアクセント(残り約20%を3種で分け合う)として、15m四方のタイルを敷き詰める
+const FLOOR_TILE_SIZE = 15;
+const FLOOR_TILE_ACCENT_RATIO = 0.2; // ベース以外(アクセント3種合計)の出現割合
+let floorTilesReady = false;
+const floorTilePieces = { slit: [], solid: [] }; // applyWorldScale()からの表示切り替え対象
+function updateFloorTileVisibility(){
+  if (!floorTilesReady) return;
+  floorTilePieces.solid.forEach(im => { im.visible = !slitEnabled; });
+  floorTilePieces.slit.forEach(im => { im.visible = slitEnabled; });
+}
+// 画像読み込みに失敗しても(通信不調・一部環境の制限など)既存の格子模様のまま表示されるだけで、ゲーム進行には影響しない
+new THREE.TextureLoader().load('img/tile.jpg', (baseTexture) => {
+  // アトラス上の位置(3列3行、0始まり)を切り出す。three.jsのUVは下から上へVが増えるため行番号を上下反転させる
+  function atlasClone(col, row){
+    const t = baseTexture.clone();
+    t.needsUpdate = true;
+    t.repeat.set(1/3, 1/3);
+    t.offset.set(col/3, (3-1-row)/3);
+    t.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
+    return t;
+  }
+  const floorMats = [
+    new THREE.MeshStandardMaterial({ map: atlasClone(1,0), roughness:1, metalness:0 }), // 中央上: ベース
+    new THREE.MeshStandardMaterial({ map: atlasClone(2,0), roughness:1, metalness:0 }), // 右上: アクセント
+    new THREE.MeshStandardMaterial({ map: atlasClone(1,1), roughness:1, metalness:0 }), // 中央: アクセント
+    new THREE.MeshStandardMaterial({ map: atlasClone(0,2), roughness:1, metalness:0 })  // 左下: アクセント
+  ];
+  const tileGeo = new THREE.PlaneGeometry(FLOOR_TILE_SIZE, FLOOR_TILE_SIZE);
+  // マス目ごとの座標から算出する簡易な決定的疑似乱数(Math.random()は使わない)。リロードのたびに
+  // 床の見た目が変わらず安定する(乱数の種を保存しなくて済む)
+  function cellRandom(a, b){
+    const s = Math.sin(a*127.1 + b*311.7) * 43758.5453;
+    return s - Math.floor(s);
+  }
+  const half = GROUND_HALF;
+  const n = Math.round(GROUND_SIZE/FLOOR_TILE_SIZE); // 80
+  // マテリアル(ベース1種+アクセント3種)ごとに配置行列をため込み、あとでInstancedMeshにまとめて描画回数を最小限にする
+  const solidMatrices = [[], [], [], []];
+  const slitMatrices = [[], [], [], []];
+  const dummy = new THREE.Object3D();
+  for (let ix=0; ix<n; ix++){
+    for (let iz=0; iz<n; iz++){
+      const cx = -half + FLOOR_TILE_SIZE*(ix+0.5);
+      const cz = -half + FLOOR_TILE_SIZE*(iz+0.5);
+      const r = cellRandom(ix, iz);
+      // 80%はベース(0)、残り20%を3種のアクセント(1〜3)で均等に分け合う
+      const matIndex = (r >= FLOOR_TILE_ACCENT_RATIO) ? 0 : 1 + Math.floor((r/FLOOR_TILE_ACCENT_RATIO)*3) % 3;
+      const spin = Math.floor(cellRandom(iz, ix)*4) * (Math.PI/2); // 見た目の単調な繰り返し感を減らす90°刻みのランダム回転
+      dummy.position.set(cx, 0.02, cz);
+      dummy.rotation.set(-Math.PI/2, spin, 0);
+      dummy.updateMatrix();
+      solidMatrices[matIndex].push(dummy.matrix.clone());
+      // 第二部・第三部用: スリット(裂け目)の実際の穴と重なるマスには配置しない(下の格子模様の穴がそのまま見えるようにする)
+      const onNS = Math.abs(Math.abs(cz)-SLIT_DIST) <= SLIT_WIDTH/2 && Math.abs(cx) <= SLIT_SPAN/2;
+      const onEW = Math.abs(Math.abs(cx)-SLIT_DIST) <= SLIT_WIDTH/2 && Math.abs(cz) <= SLIT_SPAN/2;
+      if (!onNS && !onEW) slitMatrices[matIndex].push(dummy.matrix.clone());
+    }
+  }
+  function buildInstanced(matricesArr, mat){
+    const im = new THREE.InstancedMesh(tileGeo, mat, Math.max(1, matricesArr.length));
+    matricesArr.forEach((m, i) => im.setMatrixAt(i, m));
+    im.count = matricesArr.length;
+    im.instanceMatrix.needsUpdate = true;
+    groundGroup.add(im);
+    return im;
+  }
+  for (let i=0; i<4; i++){
+    floorTilePieces.solid.push(buildInstanced(solidMatrices[i], floorMats[i]));
+    floorTilePieces.slit.push(buildInstanced(slitMatrices[i], floorMats[i]));
+  }
+  floorTilesReady = true;
+  updateFloorTileVisibility(); // 読み込み完了時点で既に難易度が確定していた場合に備え、現在の状態を反映する
+});
+
 // 淵に沿った警告ストライプ(境界の目印)
 function createStripeTexture(){
   const size = 64;
@@ -3190,6 +3266,7 @@ function applyWorldScale(diff){
   slitEnabled = (diff !== 1);
   groundPieces.forEach(p => { p.mesh.visible = slitEnabled; });
   groundSolidPiece.mesh.visible = !slitEnabled;
+  updateFloorTileVisibility(); // 床パネルタイル(読み込み済みなら)も同じ基準で表示を切り替える
 }
 let currentRateStep = SKULL_RATE_STEP_LV1;
 let awaitingDifficulty = true;
