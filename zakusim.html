@@ -61,7 +61,8 @@
   }
   /* ジョジョ立ちで物資を奪った瞬間に、奪われた側→奪った側のアイコンへ飛んでいく演出用(JSがleft/topを書き換えてtransitionで動かす) */
   .vsFlyIcon {
-    position:fixed; z-index:25; pointer-events:none; font-size:22px;
+    position:fixed; z-index:25; pointer-events:none; font-size:56px;
+    filter: drop-shadow(0 0 8px rgba(255,220,80,0.9)) drop-shadow(0 0 18px rgba(255,170,0,0.75));
     transform:translate(-50%,-50%);
     transition:left 0.45s ease-in, top 0.45s ease-in, opacity 0.45s ease-in;
   }
@@ -2956,14 +2957,33 @@ const vsResultDetailEl = document.getElementById('vsResultDetail');
 const vsResultBackBtnEl = document.getElementById('vsResultBackBtn');
 // ジョジョ立ちで物資を奪った瞬間、奪われた側のアイコンから奪った側のアイコンへ📦が飛んでいく簡易演出。
 // 要素を毎回1個生成し、CSSのtransitionでleft/topを目的地へ動かした後、アニメーション終了を待って取り除く
-function flyResourceIcon(fromEl, toEl){
-  const fromRect = fromEl.getBoundingClientRect();
+// ワールド座標(x,y,z)を現在のカメラ視点での画面ピクセル座標に変換する(物資強奪の飛び出しアイコンの発生位置に使う)。
+// カメラの真後ろなど通常起こらない状況の保険として、その場合は画面中央にフォールバックする
+function worldToScreenPoint(x, y, z){
+  camera.updateMatrixWorld();
+  const v = new THREE.Vector3(x, y, z);
+  const view = v.clone().applyMatrix4(camera.matrixWorldInverse);
+  if (view.z >= 0) return { x: window.innerWidth/2, y: window.innerHeight/2 };
+  v.project(camera);
+  return {
+    x: clamp((v.x*0.5+0.5) * window.innerWidth, 0, window.innerWidth),
+    y: clamp((1-(v.y*0.5+0.5)) * window.innerHeight, 0, window.innerHeight)
+  };
+}
+// ジョジョ立ちで物資を奪われた側のキャラクター(胸のあたりの高さ)の画面上の位置を返す
+function vsCharacterScreenPoint(isPlayer){
+  return isPlayer
+    ? worldToScreenPoint(pos.x, airY+cur.hipY+TORSO_H*0.5, pos.z)
+    : worldToScreenPoint(cpu.x, cpu.airY+LEG_LEN+TORSO_H*0.5, cpu.z);
+}
+// 物資を奪われた側のキャラクターから物資アイコンが飛び出し、奪った側のストックUI(toEl)へ飛んでいく演出
+function flyResourceIcon(fromPoint, toEl){
   const toRect = toEl.getBoundingClientRect();
   const icon = document.createElement('div');
   icon.className = 'vsFlyIcon';
   icon.textContent = '📦';
-  icon.style.left = (fromRect.left + fromRect.width/2) + 'px';
-  icon.style.top = (fromRect.top + fromRect.height/2) + 'px';
+  icon.style.left = fromPoint.x + 'px';
+  icon.style.top = fromPoint.y + 'px';
   document.body.appendChild(icon);
   requestAnimationFrame(() => { // 1フレーム後に目的地の座標へ変更し、transitionで飛ばす
     icon.style.left = (toRect.left + toRect.width/2) + 'px';
@@ -4231,6 +4251,10 @@ window.addEventListener('keydown', (e)=>{
 
   if (awaitingDifficulty){
     if (rankingOverlayOpen) return; // ランキング表示中はゲーム開始キーを無視する
+    // カーソルキーでボタン選択(フォーカス移動)、Enterで決定。PCコントローラーのフォーカス移動・A決定と同じ処理を共有する
+    if (!e.repeat && (e.key === 'ArrowLeft' || e.key === 'ArrowUp')){ e.preventDefault(); gpMoveFocus(-1); return; }
+    if (!e.repeat && (e.key === 'ArrowRight' || e.key === 'ArrowDown')){ e.preventDefault(); gpMoveFocus(1); return; }
+    if (!e.repeat && e.key === 'Enter'){ e.preventDefault(); gpConfirmFocused(); return; }
     if (!e.repeat && (e.key === '1' || e.key === '2' || (e.key === '3' && part3Unlocked))){
       diffKeyDownAt[e.key] = performance.now();
       diffPressActive = true;
@@ -4670,12 +4694,22 @@ function gpMoveFocus(dir){
   const next = (idx < 0) ? 0 : (idx + dir + btns.length) % btns.length;
   btns[next].focus();
 }
-// 現在フォーカスされているボタン(一覧の外なら先頭)をAボタンで決定(クリック)する
+// 難易度選択画面のボタン(diffBtn1/2/3/diffBtnVs)は、押しっぱなし3秒で無敵モードにする都合上mousedown/touchstartと
+// mouseup/touchendの組で判定しており、通常のclickイベントは拾わない。そのためPCコントローラー・キーボードでの
+// 決定操作(常に即時決定、長押し判定なし)は、ボタンIDから直接どの難易度かを判断してstartGame()を呼ぶ
+function activateDiffButton(el){
+  if (!el || !awaitingDifficulty) return;
+  if (el.id === 'diffBtnVs'){ if (vsModeUnlocked) startVsModeGame(); return; }
+  const m = el.id.match(/^diffBtn(\d)$/);
+  if (m) startGame(Number(m[1]), false);
+}
+// 現在フォーカスされているボタン(一覧の外なら先頭)をAボタン/Enterで決定する
 function gpConfirmFocused(){
   const btns = gpNavButtons();
   if (btns.length === 0) return;
   const el = btns.includes(document.activeElement) ? document.activeElement : btns[0];
-  el.click();
+  if (awaitingDifficulty) activateDiffButton(el);
+  else el.click(); // VS Mode結果画面の「戻る」ボタン等、通常のclickリスナーで動くボタン用
 }
 // メニュー画面でスティックを倒した瞬間だけ1回反応させる(中央に戻るまで再入力しない。押しっぱなしで連続移動しないようにする)
 let gpMenuStickArmed = true;
@@ -6384,12 +6418,12 @@ function transferVsResource(loserIsPlayer){
   if (loserIsPlayer){
     if (playerResourceCount > 0){
       playerResourceCount--; cpu.resourceCount++;
-      flyResourceIcon(vsPlayerResourceEl, vsCpuResourceEl);
+      flyResourceIcon(vsCharacterScreenPoint(true), vsCpuResourceEl);
     }
   } else {
     if (cpu.resourceCount > 0){
       cpu.resourceCount--; playerResourceCount++;
-      flyResourceIcon(vsCpuResourceEl, vsPlayerResourceEl);
+      flyResourceIcon(vsCharacterScreenPoint(false), vsPlayerResourceEl);
     }
   }
   updateVsHud();
@@ -6553,16 +6587,15 @@ function updateCpu(dt){
     if (chasedHaro){
       const hdx = chasedHaro.x-cpu.x, hdz = chasedHaro.z-cpu.z;
       const hdist = Math.hypot(hdx, hdz);
+      // プレイヤーのupdateLocomotion()と同じMOVE_ACCELで加速・減速する(以前は瞬時に最高速へ達していたため急すぎた)
+      const targetSpeed = (hdist > 0.5) ? RUN_SPEED*(cpu.form === 2 ? cpuForm2SpeedMult() : 1) : 0;
+      cpu.chargeSpeed = accelTo(cpu.chargeSpeed, targetSpeed, MOVE_ACCEL, dt);
       if (hdist > 0.5){
         // 向きはプレイヤーと同じ旋回の緩さ(YAW_SNAP_T)でなめらかに追いつかせる(即座に振り向けると不公平なため)
         cpu.yaw = convergeAngle(cpu.yaw, Math.atan2(-hdx, -hdz), dt, YAW_SNAP_T);
-        const speed = RUN_SPEED*(cpu.form === 2 ? cpuForm2SpeedMult() : 1);
-        const step = Math.min(hdist, speed*dt);
+        const step = Math.min(hdist, cpu.chargeSpeed*dt);
         cpu.x += (hdx/hdist)*step;
         cpu.z += (hdz/hdist)*step;
-        cpu.chargeSpeed = speed;
-      } else {
-        cpu.chargeSpeed = 0;
       }
     } else {
       // 移動: 一番近い生存中の物資ブロックへまっすぐ向かう。物資ブロックは全て地上20m(高所は35m)に浮いているため、
@@ -6572,16 +6605,15 @@ function updateCpu(dt){
       if (target){
         const dx = target.x-cpu.x, dz = target.z-cpu.z;
         const dist = Math.hypot(dx, dz);
+        // プレイヤーのupdateLocomotion()と同じMOVE_ACCELで加速・減速する(以前は瞬時に最高速へ達していたため急すぎた)
+        const targetSpeed = (dist > 0.5) ? RUN_SPEED*(cpu.form === 2 ? cpuForm2SpeedMult() : 1) : 0;
+        cpu.chargeSpeed = accelTo(cpu.chargeSpeed, targetSpeed, MOVE_ACCEL, dt);
         if (dist > 0.5){
           // 向きはプレイヤーと同じ旋回の緩さ(YAW_SNAP_T)でなめらかに追いつかせる(即座に振り向けると不公平なため)
           cpu.yaw = convergeAngle(cpu.yaw, Math.atan2(-dx, -dz), dt, YAW_SNAP_T);
-          const speed = RUN_SPEED*(cpu.form === 2 ? cpuForm2SpeedMult() : 1);
-          const step = Math.min(dist, speed*dt);
+          const step = Math.min(dist, cpu.chargeSpeed*dt);
           cpu.x += (dx/dist)*step;
           cpu.z += (dz/dist)*step;
-          cpu.chargeSpeed = speed;
-        } else {
-          cpu.chargeSpeed = 0;
         }
         const withinReach = dist <= QBLOCK_SIZE*0.6; // プレイヤー側の判定を簡略化した円形の到達判定(水平方向)
         // ブロック直下まで来て、まだ地上にいるならジャンプを開始する
@@ -6609,7 +6641,7 @@ function updateCpu(dt){
           }
         }
       } else {
-        cpu.chargeSpeed = 0;
+        cpu.chargeSpeed = accelTo(cpu.chargeSpeed, 0, MOVE_ACCEL, dt); // 目指す物資が無くなった場合も瞬時に止めず滑らかに減速する
       }
     }
 
