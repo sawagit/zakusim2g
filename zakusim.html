@@ -810,7 +810,7 @@ const QBLOCK_SIZE=20.0;
 const QBLOCK_BOTTOM_Y=20.0;      // 底辺の浮遊高さ(ジャンプで届く高さまで下げた値)
 const QBLOCK_COLOR=0x9a9a9a;     // グレー(物資ブロック)
 const QBLOCK_DENSITY_RADIUS=200.0; // ブロック同士の密度の目安(半径200mに1個)
-const QBLOCK_AREA_HALF=550.0;    // ？ブロックを配置するエリア(原点から±550m四方。地面サイズ±600mに収まる範囲)
+const QBLOCK_AREA_HALF=500.0;    // ？ブロックを配置するエリア(原点から±500m四方。地面サイズ±550mに収まる範囲)
 const QBLOCK_MIN_FROM_ORIGIN=40.0; // 初期位置(原点)付近には配置しない
 const THE_WORLD_FREEZE_TIME=5.0;       // 通常時の継続時間(秒)
 const THE_WORLD_FREEZE_TIME_FORM2=10.0; // フォーム2中はこの継続時間になる(発動中にフォーム2に変身した場合も切り替わる)
@@ -1404,21 +1404,33 @@ function applySkyMode(){
 applySkyMode();
 
 // ---- 地面(厚さ10mの中空に浮いた板状。スリット部分は実際に穴が空いている) ----
-const GROUND_SIZE = 1200; // 元の1000mから200m拡大(画面奥まで格子が届くように)
+// 内側エリア600m四方+幅50mのスリット(裂け目)+幅200mの外側エリアという構成(床タイルの敷き詰めに半端が出ないよう、
+// すべてタイル1枚(50m四方)の倍数になるラウンドナンバーで揃えている。外周は600+50*2+200*2=1100m四方)
+const GROUND_SIZE = 1100;
 const GROUND_HALF = GROUND_SIZE/2; // これより外に出ると落下する(詳細は「地面」を参照)
 const GROUND_THICKNESS = 10;
 const FALL_GAMEOVER_TIME = 4.0; // 落下を始めてからGAME OVERになるまでの時間(秒)
 const VICTORY_DURATION = 8.0; // ラスボスブロックを撃破してからGAME OVER画面に切り替わるまでの演出時間(秒)
 const FALL_PENETRATION = 3.0; // 体の中心がこの距離だけ落下判定エリアに侵入して初めて落下と判定する(身体が完全に侵入した状態で落とすため)
-// 原点から300mの位置に、一辺600mの正方形リング状の幅10mスリット(裂け目)を設ける。ジャンプせずに通過すると落下する
-const SLIT_DIST = 300, SLIT_WIDTH = 10, SLIT_SPAN = 600;
-const SLIT_INNER = SLIT_DIST - SLIT_WIDTH/2, SLIT_OUTER = SLIT_DIST + SLIT_WIDTH/2; // 295, 305
+// 原点から325mの位置に、一辺600mの正方形リング状の幅50mスリット(裂け目)を設ける。ジャンプせずに通過すると落下する
+// (旧仕様は幅10mだったが、床タイルとの整合を優先して50mに拡幅した。多段ジャンプは既に必須技術のため、幅が広がっても
+// 支障はないと判断している。詳細は「地面」を参照)
+const SLIT_DIST = 325, SLIT_WIDTH = 50, SLIT_SPAN = 600;
+const SLIT_INNER = SLIT_DIST - SLIT_WIDTH/2, SLIT_OUTER = SLIT_DIST + SLIT_WIDTH/2; // 300, 350
 // 判定には(見た目のスケールに合わせた)curSlitDist等の実効値を使う。ジオメトリ自体はBASE値のまま作り、groundGroupの縮小表示に追従させる
 function isOverSlit(x, z){
   if (!slitEnabled) return false; // 第一部はスリットの仕様自体が無い
   const half = Math.max(0, curSlitWidth/2 - FALL_PENETRATION), spanHalf = curSlitSpan/2;
   const onNS = Math.abs(Math.abs(z)-curSlitDist) <= half && Math.abs(x) <= spanHalf; // 南北方向の辺
   const onEW = Math.abs(Math.abs(x)-curSlitDist) <= half && Math.abs(z) <= spanHalf; // 東西方向の辺
+  return onNS || onEW;
+}
+// スリット(裂け目)の穴そのものに入っているかどうか(FALL_PENETRATIONの猶予を含まない、見た目の穴の形そのままの判定)。
+// 敵ザクがジャンプせずに穴を渡ってしまわないよう、移動の可否判定に使う(第二部・第三部限定。第一部は敵ザク自体が出現しない)
+function isInSlitGap(x, z){
+  const half = curSlitWidth/2, spanHalf = curSlitSpan/2;
+  const onNS = Math.abs(Math.abs(z)-curSlitDist) <= half && Math.abs(x) <= spanHalf;
+  const onEW = Math.abs(Math.abs(x)-curSlitDist) <= half && Math.abs(z) <= spanHalf;
   return onNS || onEW;
 }
 // 地面が存在しない位置(ステージ外、またはスリットの真上)かどうかを判定する(自機・敵の影の表示要否に使う)
@@ -1476,19 +1488,21 @@ const groundSolidPiece = createGroundPiece(GROUND_SIZE, GROUND_SIZE, 0, 0);
 groundSolidPiece.mesh.visible = false;
 
 // ---- 床のパネルタイル(格子模様の上に重ねて表示する、3種類の画像を指定比率で敷き詰める) ----
-// tile.png(90%)を基本とし、tile_base.png・tile2.png(各5%)をアクセントとして100m四方のタイルを敷き詰める
-const FLOOR_TILE_SIZE = 100;
+// 第二部・第三部限定の演出(第一部・VS Modeは従来通りの格子模様のみ)。
+// tile.png(90%)を基本とし、tile_base.png・tile2.png(各5%)をアクセントとして50m四方のタイルを敷き詰める。
+// タイル1枚=50mは、スリット幅(50m)・内側エリア(600m)・外側エリア幅(200m)のいずれとも割り切れるため、
+// マス目の境界とスリットの境界がぴったり揃い、半端な(タイルを切り欠く)処理が不要になっている
+const FLOOR_TILE_SIZE = 50;
 const FLOOR_TILE_SPECS = [
   { file:'img/tile_base.png', weight:0.05 },
   { file:'img/tile2.png',     weight:0.05 },
   { file:'img/tile.png',      weight:0.9 }
 ];
 let floorTilesReady = false;
-const floorTilePieces = { slit:[], solid:[] }; // applyWorldScale()からの表示切り替え対象
+const floorTilePieces = []; // applyWorldScale()からの表示切り替え対象(第二部・第三部でのみ表示する)
 function updateFloorTileVisibility(){
   if (!floorTilesReady) return;
-  floorTilePieces.solid.forEach(im => { im.visible = !slitEnabled; });
-  floorTilePieces.slit.forEach(im => { im.visible = slitEnabled; });
+  floorTilePieces.forEach(im => { im.visible = slitEnabled; }); // slitEnabled=第二部・第三部のみtrue
 }
 // 3枚とも読み込み終わった時点で床を組み立てる。読み込みに失敗した場合(通信不調等)は既存の格子模様のままになるだけで、
 // ゲーム進行には一切影響しない
@@ -1508,7 +1522,7 @@ function updateFloorTileVisibility(){
 function buildFloorTiles(textures){
   const floorMats = textures.map(tex => new THREE.MeshStandardMaterial({ map:tex, roughness:1, metalness:0 }));
   const tileGeo = new THREE.PlaneGeometry(FLOOR_TILE_SIZE, FLOOR_TILE_SIZE);
-  // 重み(80/10/10)の累積値。マス目ごとの乱数がどの区間に入るかでどの柄を使うか決める
+  // 重みの累積値。マス目ごとの乱数がどの区間に入るかでどの柄を使うか決める
   const cumWeights = [];
   FLOOR_TILE_SPECS.reduce((sum, spec) => { const c = sum + spec.weight; cumWeights.push(c); return c; }, 0);
   // マス目の座標から算出する簡易な決定的疑似乱数(Math.random()は使わない)。リロードのたびに
@@ -1520,13 +1534,17 @@ function buildFloorTiles(textures){
   const half = GROUND_HALF;
   const n = Math.round(GROUND_SIZE/FLOOR_TILE_SIZE);
   // マテリアルの種類ごとに配置行列をため込み、あとでInstancedMeshにまとめて描画回数を最小限にする
-  const solidMatrices = FLOOR_TILE_SPECS.map(() => []);
-  const slitMatrices = FLOOR_TILE_SPECS.map(() => []);
+  const matrices = FLOOR_TILE_SPECS.map(() => []);
   const dummy = new THREE.Object3D();
   for (let ix=0; ix<n; ix++){
     for (let iz=0; iz<n; iz++){
       const cx = -half + FLOOR_TILE_SIZE*(ix+0.5);
       const cz = -half + FLOOR_TILE_SIZE*(iz+0.5);
+      // スリット(裂け目)と重なるマスには配置しない(下の格子模様の穴がそのまま見えるようにする)。
+      // タイル境界とスリットの境界が50m単位でぴったり揃っているため、中心座標だけの判定で過不足なく除外できる
+      const onNS = Math.abs(Math.abs(cz)-SLIT_DIST) <= SLIT_WIDTH/2 && Math.abs(cx) <= SLIT_SPAN/2;
+      const onEW = Math.abs(Math.abs(cx)-SLIT_DIST) <= SLIT_WIDTH/2 && Math.abs(cz) <= SLIT_SPAN/2;
+      if (onNS || onEW) continue;
       const r = cellRandom(ix, iz);
       let matIndex = cumWeights.length-1;
       for (let i=0;i<cumWeights.length;i++){ if (r < cumWeights[i]){ matIndex = i; break; } }
@@ -1536,27 +1554,16 @@ function buildFloorTiles(textures){
       dummy.position.set(cx, 0.02, cz);
       dummy.rotation.set(-Math.PI/2, 0, spin);
       dummy.updateMatrix();
-      solidMatrices[matIndex].push(dummy.matrix.clone());
-      // 第二部・第三部用: スリット(裂け目)の実際の穴とタイルの正方形の範囲(中心だけでなく1枚ぶんの一辺の半分まで)が
-      // 少しでも重なる場合は配置しない(下の格子模様の穴が隠れてしまい、スリットが見えなくなるのを防ぐ。
-      // タイルが大きい(FLOOR_TILE_SIZE=100m)ため、中心座標だけでの判定だと1枚も除外されずスリット全体を覆ってしまっていた)
-      const tileHalf = FLOOR_TILE_SIZE/2;
-      const onNS = Math.abs(Math.abs(cz)-SLIT_DIST) <= SLIT_WIDTH/2+tileHalf && Math.abs(cx) <= SLIT_SPAN/2+tileHalf;
-      const onEW = Math.abs(Math.abs(cx)-SLIT_DIST) <= SLIT_WIDTH/2+tileHalf && Math.abs(cz) <= SLIT_SPAN/2+tileHalf;
-      if (!onNS && !onEW) slitMatrices[matIndex].push(dummy.matrix.clone());
+      matrices[matIndex].push(dummy.matrix.clone());
     }
   }
-  function buildInstanced(matricesArr, mat){
-    const im = new THREE.InstancedMesh(tileGeo, mat, Math.max(1, matricesArr.length));
-    matricesArr.forEach((m, i) => im.setMatrixAt(i, m));
-    im.count = matricesArr.length;
+  for (let i=0; i<floorMats.length; i++){
+    const im = new THREE.InstancedMesh(tileGeo, floorMats[i], Math.max(1, matrices[i].length));
+    matrices[i].forEach((m, j) => im.setMatrixAt(j, m));
+    im.count = matrices[i].length;
     im.instanceMatrix.needsUpdate = true;
     groundGroup.add(im);
-    return im;
-  }
-  for (let i=0; i<floorMats.length; i++){
-    floorTilePieces.solid.push(buildInstanced(solidMatrices[i], floorMats[i]));
-    floorTilePieces.slit.push(buildInstanced(slitMatrices[i], floorMats[i]));
+    floorTilePieces.push(im);
   }
   floorTilesReady = true;
   updateFloorTileVisibility(); // 読み込み完了時点で既に難易度が確定していた場合に備え、現在の状態を反映する
@@ -3602,11 +3609,16 @@ function spawnZaku(){
   const dirX = Math.sin(angle), dirZ = Math.cos(angle);
   const spawnRadius = ZAKU_SPAWN_RADIUS_MIN + Math.random()*(ZAKU_SPAWN_RADIUS_MAX-ZAKU_SPAWN_RADIUS_MIN);
   const mesh = createZakuMesh(isForm2);
+  // プレイヤーからの距離だけで決めると、プレイヤーが端に寄っている場合にステージの外側の空中から降ってきてしまうため、
+  // 落下位置(x,z)はステージの範囲内(少し内側に余裕を持たせた範囲)に収まるようクランプする
+  const spawnMargin = 20;
+  const spawnX = clamp(pos.x + dirX*spawnRadius, -curGroundHalf+spawnMargin, curGroundHalf-spawnMargin);
+  const spawnZ = clamp(pos.z + dirZ*spawnRadius, -curGroundHalf+spawnMargin, curGroundHalf-spawnMargin);
   const z = {
     mesh,
-    x: pos.x + dirX*spawnRadius,
+    x: spawnX,
     y: ZAKU_SPAWN_HEIGHT,
-    z: pos.z + dirZ*spawnRadius,
+    z: spawnZ,
     phase: 'falling', // falling | charging | wandering
     wanderer: isWanderer,
     wanderTargetX: 0, wanderTargetZ: 0,
@@ -3690,8 +3702,10 @@ function updateZakus(dt){
       if (d > 0.01){
         // プレイヤーへ向かう角度に個体ごとの一定のブレ(steerOffset)を加え、複数体が同じ軌道で重ならないようにする
         const angle = Math.atan2(dx, dz) + z.steerOffset;
-        z.x += Math.sin(angle)*z.chargeSpeed*dt;
-        z.z += Math.cos(angle)*z.chargeSpeed*dt;
+        const nx = z.x + Math.sin(angle)*z.chargeSpeed*dt;
+        const nz = z.z + Math.cos(angle)*z.chargeSpeed*dt;
+        // スリット(裂け目)を渡って追ってくることはできない。際まで来ると足止めされる(ジャンプできないため)
+        if (!isInSlitGap(nx, nz)){ z.x = nx; z.z = nz; }
       }
       updateZakuWalkAnim(z, dt);
       z.mesh.group.rotation.y = Math.atan2(z.x-pos.x, z.z-pos.z); // 突進中は常にプレイヤーの方向を向く
@@ -3710,9 +3724,15 @@ function updateZakus(dt){
       if (d <= ZAKU_WANDER_ARRIVE_DIST){
         pickZakuWanderTarget(z); // 目的地に着いたら次の目的地(？ブロック優先)を選び直し、うろつき続ける
       } else {
-        z.x += (dx/d)*z.chargeSpeed*dt;
-        z.z += (dz/d)*z.chargeSpeed*dt;
-        z.mesh.group.rotation.y = Math.atan2(-dx, -dz); // うろついている間は進行方向を向く(プレイヤーの方向ではない)
+        const nx = z.x + (dx/d)*z.chargeSpeed*dt;
+        const nz = z.z + (dz/d)*z.chargeSpeed*dt;
+        if (isInSlitGap(nx, nz)){
+          // スリットの先を目指していた場合は渡れないので諦め、別の目的地を選び直す(足止めされたまま固まらないように)
+          pickZakuWanderTarget(z);
+        } else {
+          z.x = nx; z.z = nz;
+          z.mesh.group.rotation.y = Math.atan2(-dx, -dz); // うろついている間は進行方向を向く(プレイヤーの方向ではない)
+        }
       }
       updateZakuWalkAnim(z, dt);
 
@@ -3733,7 +3753,7 @@ function updateZakus(dt){
   for (const z of zakus) z.mesh.group.position.set(z.x, z.y, z.z);
 }
 
-const ZAKU_SEPARATION_DIST = 6.0; // この距離より近づいた地上の敵ザク同士は、重ならないよう互いに押し返す
+const ZAKU_SEPARATION_DIST = 10.0; // この距離より近づいた地上の敵ザク同士は、重ならないよう互いに押し返す(密集回避のため6mから拡大)
 function separateZakus(){
   for (let i=0;i<zakus.length;i++){
     const a = zakus[i];
