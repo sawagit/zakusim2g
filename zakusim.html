@@ -1967,8 +1967,8 @@ function pushOutOfSlitGap(x, z){
   if (!slitEnabled) return { x, z };
   const m = Math.max(Math.abs(x), Math.abs(z));
   if (m < 0.001 || !isInSlitGap(x, z)) return { x, z };
-  const innerEdge = curSlitDist - curSlitWidth/2 - 1; // 内側の島ぎりぎり(1mの余裕を残す)
-  const outerEdge = curSlitDist + curSlitWidth/2 + 1; // 外側エリアぎりぎり
+  const innerEdge = curSlitDist - curSlitWidth/2 - 10; // 内側の島の端から10m内側
+  const outerEdge = curSlitDist + curSlitWidth/2 + 10; // 外側エリアの端から10m内側
   const newM = (m - innerEdge <= outerEdge - m) ? innerEdge : outerEdge; // 内側・外側どちらに近いかで振り分ける
   const scale = newM / m;
   return { x: x*scale, z: z*scale };
@@ -3640,8 +3640,9 @@ function spawnZaku(){
   // プレイヤーからの距離だけで決めると、プレイヤーが端に寄っている場合にステージの外側の空中から降ってきてしまうため、
   // 落下位置(x,z)はステージの範囲内(少し内側に余裕を持たせた範囲)に収まるようクランプする
   const spawnMargin = 20;
-  const spawnX = clamp(pos.x + dirX*spawnRadius, -curGroundHalf+spawnMargin, curGroundHalf-spawnMargin);
-  const spawnZ = clamp(pos.z + dirZ*spawnRadius, -curGroundHalf+spawnMargin, curGroundHalf-spawnMargin);
+  let spawnX = clamp(pos.x + dirX*spawnRadius, -curGroundHalf+spawnMargin, curGroundHalf-spawnMargin);
+  let spawnZ = clamp(pos.z + dirZ*spawnRadius, -curGroundHalf+spawnMargin, curGroundHalf-spawnMargin);
+  ({ x:spawnX, z:spawnZ } = pushOutOfSlitGap(spawnX, spawnZ)); // スリット(裂け目)の真上に降ってこないよう、最寄りの盤面へ押し出す
   const z = {
     mesh,
     x: spawnX,
