@@ -3286,7 +3286,8 @@ const TROPHIES = {
   qblock_6:    '六つッ！',                       // ？ブロックを6個目取得
   qblock_7:    '七つッッ！！',                   // ？ブロックを7個目取得
   qblock_8:    '八イィィッ！',                   // ？ブロックを8個目取得
-  qblock_9:    'あと一つ！！'                    // ？ブロックを9個目取得
+  qblock_9:    'あと一つ！！',                   // ？ブロックを9個目取得
+  silver_orb:  '行け！お前たちッ！'              // スペシャルブロック(銀玉)を取得
 };
 const TROPHY_TOAST_TIME = 3.5;
 const TROPHIES_KEY = 'zakusim_trophies';
@@ -3680,6 +3681,7 @@ function applySkullHit(x, y, z){
     return;
   }
   awardTrophy('first_hit'); // 初めて被弾した瞬間(ライフが0になったかどうかは問わない)
+  damageSpecialBuffOrb(); // スペシャルブロックの銀玉を保持中なら、実際にダメージを受けた瞬間に1個失う
   playerLife = Math.max(0, playerLife - 1);
   updateLifeBar();
   updatePlayerAppearance(); // 被弾のたびにボディ色を1段階暗くする(ライフが減るほど黒っぽくなる)
@@ -5901,7 +5903,10 @@ function updateQBlock(dt){
     b.mesh.visible = false;
     b.shadow.visible = false;
     triggerForm2();
-    if (b.special) activateSpecialBuff(); // スペシャルブロック限定:20秒間、黒い球体3個が周囲の敵ザク・ドクロをレーザーで自動撃破する
+    if (b.special){
+      activateSpecialBuff(); // スペシャルブロック限定:銀玉3個が周囲の敵ザク・ドクロをレーザーで自動撃破する(時間制限なし、被弾で1個ずつ減る)
+      if (!vsMode) awardTrophy('silver_orb');
+    }
     if (vsMode){
       collectVsBlock('player'); // VS Modeは専用の勝敗・カウント処理に分岐し、トロフィー・ボス出現等の一人用ロジックは一切通らない
       continue;
@@ -5924,13 +5929,12 @@ function updateQBlock(dt){
   }
 }
 
-// ---- スペシャルブロックの効果:黒い球体3個が機体の周りを回転し、1秒おきに周囲の敵ザク・ドクロを自動撃破する ----
-const SPECIAL_BUFF_DURATION = 30.0;
-const SPECIAL_BUFF_WARNING_TIME = 3.0;  // この秒数を切ると球体が点滅し始め、終了と同時に消える
+// ---- スペシャルブロックの効果:銀玉3個が機体の周りを回転し、1秒おきに周囲の敵ザク・ドクロを自動撃破する ----
+// 時間制限は無く、取得後はずっと有効。ただしダメージを受けるたびに銀玉が1個ずつ失われ、0個になった時点で効果終了する
 const SPECIAL_BUFF_ORB_COUNT = 3;
 const SPECIAL_BUFF_LASER_INTERVAL = 1.0;
 const SPECIAL_BUFF_RANGE = 40.0;        // この水平距離以内の敵ザク・ドクロだけを対象にする
-const SPECIAL_BUFF_ORB_RADIUS = 1.6;
+const SPECIAL_BUFF_ORB_RADIUS = 0.8;    // 直径を当初の半分にした値
 const SPECIAL_BUFF_ORBIT_RADIUS = 27.0; // 機体中心からの回転半径(当初4.5m→13.5m→さらに倍の27mに拡大)
 const SPECIAL_BUFF_ORBIT_HEIGHT = CHAR_HEIGHT + 2.0; // 頭上(全高17mより2m上)を旋回するようにする
 const SPECIAL_BUFF_ORBIT_SPEED = 2.5;   // rad/s
@@ -5938,9 +5942,8 @@ const SPECIAL_BUFF_WOBBLE_R_AMP = 3.0;  // 回転半径のゆらぎの振幅(m)
 const SPECIAL_BUFF_WOBBLE_R_FREQ = 1.3; // 回転角速度に対する半径ゆらぎの周波数比
 const SPECIAL_BUFF_WOBBLE_Y_AMP = 2.0;  // 上下のゆらぎの振幅(m)
 const SPECIAL_BUFF_WOBBLE_Y_FREQ = 0.9; // 回転角速度に対する上下ゆらぎの周波数比
-const SPECIAL_BUFF_BLINK_PERIOD = 0.15;
-const SPECIAL_BUFF_LASER_COLOR = 0x33ff55; // 発光グリーン
-const specialBuffOrbMat = new THREE.MeshStandardMaterial({ color:0x0a0a0a, metalness:0.7, roughness:0.25, emissive:0x2a0a3d, emissiveIntensity:0.6 });
+const SPECIAL_BUFF_LASER_COLOR = 0x33ff55; // レーザーは発光グリーン(銀玉自体の色とは別)
+const specialBuffOrbMat = new THREE.MeshStandardMaterial({ color:0xc8ccd4, metalness:0.9, roughness:0.15, emissive:0x8fa0b8, emissiveIntensity:0.9 }); // 発光銀色
 const specialBuffOrbs = [];
 for (let i=0;i<SPECIAL_BUFF_ORB_COUNT;i++){
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(SPECIAL_BUFF_ORB_RADIUS, 16, 12), specialBuffOrbMat);
@@ -5948,20 +5951,33 @@ for (let i=0;i<SPECIAL_BUFF_ORB_COUNT;i++){
   scene.add(mesh);
   specialBuffOrbs.push(mesh);
 }
-let specialBuffTimer = -1; // -1=非アクティブ。0以上で効果発動中(経過秒数)
+let specialBuffActive = false;
+let specialBuffOrbCount = 0;   // 残っている銀玉の数(0〜SPECIAL_BUFF_ORB_COUNT)。0になった瞬間に効果終了する
 let specialBuffLaserTimer = 0;
 let specialBuffOrbitAngle = 0;
+function updateSpecialBuffOrbVisibility(){
+  for (let i=0;i<SPECIAL_BUFF_ORB_COUNT;i++) specialBuffOrbs[i].visible = i < specialBuffOrbCount;
+}
 function activateSpecialBuff(){
-  specialBuffTimer = 0;
+  specialBuffActive = true;
+  specialBuffOrbCount = SPECIAL_BUFF_ORB_COUNT;
   specialBuffLaserTimer = 0;
   specialBuffOrbitAngle = 0;
-  specialBuffOrbs.forEach(m => { m.visible = true; });
+  updateSpecialBuffOrbVisibility();
 }
 function deactivateSpecialBuff(){
-  specialBuffTimer = -1;
+  specialBuffActive = false;
+  specialBuffOrbCount = 0;
   specialBuffOrbs.forEach(m => { m.visible = false; });
 }
-// 周囲(SPECIAL_BUFF_RANGE以内)の敵ザク・ドクロ(飛行/落下中のみ)のうち近い順に、球体の数だけ即座に撃破する。
+// ダメージを受けるたびに呼ぶ(applySkullHitの実ダメージ発生時に呼び出す)。銀玉を1個減らし、0になったら効果ごと終了する
+function damageSpecialBuffOrb(){
+  if (!specialBuffActive || specialBuffOrbCount <= 0) return;
+  specialBuffOrbCount--;
+  if (specialBuffOrbCount <= 0){ deactivateSpecialBuff(); return; }
+  updateSpecialBuffOrbVisibility();
+}
+// 周囲(SPECIAL_BUFF_RANGE以内)の敵ザク・ドクロ(飛行/落下中のみ)のうち近い順に、残っている銀玉の数だけ即座に撃破する。
 // 対象が1体もいなければ何もしない(発射しない)。レーダーの検知等と同様、水平距離のみの簡易判定で十分とする
 function fireSpecialBuffLasers(){
   const targets = [];
@@ -5976,10 +5992,10 @@ function fireSpecialBuffLasers(){
   }
   if (targets.length === 0) return; // 周囲に対象が1体もいなければ発射しない
   targets.sort((a,b) => a.d-b.d);
-  // 対象が3体に満たない場合も、3つの玉から常に3本同時にレーザーを発射する(近い順の対象を使い回す)。
+  // 対象が銀玉の数に満たない場合も、残っている銀玉すべてから同時にレーザーを発射する(近い順の対象を使い回す)。
   // ただし同じ対象を複数の玉が撃った場合、実際の撃破処理は1回だけ行う(2本目以降は着弾演出のみ)
   const destroyed = new Set();
-  for (let i=0;i<SPECIAL_BUFF_ORB_COUNT;i++){
+  for (let i=0;i<specialBuffOrbCount;i++){
     const t = targets[i % targets.length];
     const orb = specialBuffOrbs[i];
     spawnLaserBeam(orb.position.x, orb.position.y, orb.position.z, t.x, t.y, t.z, SPECIAL_BUFF_LASER_COLOR, 0.25, 0.12);
@@ -5998,14 +6014,10 @@ function fireSpecialBuffLasers(){
 }
 function updateSpecialBuff(dt){
   if (invincibleMode){
-    // 無敵モード中は確認しやすいよう、取得の有無に関わらず常に球体を出しっぱなしにする(自動終了・点滅警告もしない)
-    if (specialBuffTimer < 0) activateSpecialBuff();
-    specialBuffTimer = 0;
-  } else if (specialBuffTimer < 0){
+    // 無敵モード中は確認しやすいよう、取得の有無に関わらず常に銀玉3個を出しっぱなしにする(無敵モード中はダメージ自体が発生しないため自然に減らない)
+    if (!specialBuffActive) activateSpecialBuff();
+  } else if (!specialBuffActive){
     return;
-  } else {
-    // プレイヤー自身のザ・世界発動中も、裏技のオーラと同様にこの効果は止めない(敵は静止したまま撃破され続ける)
-    specialBuffTimer += dt;
   }
   specialBuffOrbitAngle += SPECIAL_BUFF_ORBIT_SPEED*dt;
   const cy = airY + SPECIAL_BUFF_ORBIT_HEIGHT;
@@ -6017,17 +6029,11 @@ function updateSpecialBuff(dt){
     const r = SPECIAL_BUFF_ORBIT_RADIUS + wobbleR;
     specialBuffOrbs[i].position.set(pos.x+Math.cos(angle)*r, cy+wobbleY, pos.z+Math.sin(angle)*r);
   }
-  const remaining = SPECIAL_BUFF_DURATION - specialBuffTimer;
-  if (!invincibleMode && remaining <= SPECIAL_BUFF_WARNING_TIME){
-    const blinkOn = Math.floor(specialBuffTimer / SPECIAL_BUFF_BLINK_PERIOD) % 2 === 0;
-    specialBuffOrbs.forEach(m => { m.visible = blinkOn; });
-  }
   specialBuffLaserTimer += dt;
   if (specialBuffLaserTimer >= SPECIAL_BUFF_LASER_INTERVAL){
     specialBuffLaserTimer -= SPECIAL_BUFF_LASER_INTERVAL;
     fireSpecialBuffLasers();
   }
-  if (!invincibleMode && specialBuffTimer >= SPECIAL_BUFF_DURATION) deactivateSpecialBuff();
 }
 
 // ネガポジ反転させる、プレイヤー・UI以外のワールドオブジェクトの素材(色は元の16進数値を保持し反転/復元する)
