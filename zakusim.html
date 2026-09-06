@@ -1415,23 +1415,21 @@ const FALL_PENETRATION = 3.0; // 体の中心がこの距離だけ落下判定�
 // 原点から325mの位置に、一辺600mの正方形リング状の幅50mスリット(裂け目)を設ける。ジャンプせずに通過すると落下する
 // (旧仕様は幅10mだったが、床タイルとの整合を優先して50mに拡幅した。多段ジャンプは既に必須技術のため、幅が広がっても
 // 支障はないと判断している。詳細は「地面」を参照)
-const SLIT_DIST = 325, SLIT_WIDTH = 50, SLIT_SPAN = 600;
+const SLIT_DIST = 325, SLIT_WIDTH = 50;
 const SLIT_INNER = SLIT_DIST - SLIT_WIDTH/2, SLIT_OUTER = SLIT_DIST + SLIT_WIDTH/2; // 300, 350
 // 判定には(見た目のスケールに合わせた)curSlitDist等の実効値を使う。ジオメトリ自体はBASE値のまま作り、groundGroupの縮小表示に追従させる
+// スリットは正方形リング状なので、原点からのチェビシェフ距離(x・zの絶対値の大きい方)がINNER〜OUTERの範囲に
+// 収まっているかどうかで判定する(この形なら四隅も含めて過不足なく判定できる。以前はNS/EWの帯2枚に分けて判定しており、
+// 四隅(スリット幅が10mだった頃は5m四方、50mに拡幅してからは50m四方)が判定漏れしていた)
 function isOverSlit(x, z){
   if (!slitEnabled) return false; // 第一部はスリットの仕様自体が無い
-  const half = Math.max(0, curSlitWidth/2 - FALL_PENETRATION), spanHalf = curSlitSpan/2;
-  const onNS = Math.abs(Math.abs(z)-curSlitDist) <= half && Math.abs(x) <= spanHalf; // 南北方向の辺
-  const onEW = Math.abs(Math.abs(x)-curSlitDist) <= half && Math.abs(z) <= spanHalf; // 東西方向の辺
-  return onNS || onEW;
+  const half = Math.max(0, curSlitWidth/2 - FALL_PENETRATION);
+  return Math.abs(Math.max(Math.abs(x), Math.abs(z)) - curSlitDist) <= half;
 }
 // スリット(裂け目)の穴そのものに入っているかどうか(FALL_PENETRATIONの猶予を含まない、見た目の穴の形そのままの判定)。
 // 敵ザクがジャンプせずに穴を渡ってしまわないよう、移動の可否判定に使う(第二部・第三部限定。第一部は敵ザク自体が出現しない)
 function isInSlitGap(x, z){
-  const half = curSlitWidth/2, spanHalf = curSlitSpan/2;
-  const onNS = Math.abs(Math.abs(z)-curSlitDist) <= half && Math.abs(x) <= spanHalf;
-  const onEW = Math.abs(Math.abs(x)-curSlitDist) <= half && Math.abs(z) <= spanHalf;
-  return onNS || onEW;
+  return Math.abs(Math.max(Math.abs(x), Math.abs(z)) - curSlitDist) <= curSlitWidth/2;
 }
 // 地面が存在しない位置(ステージ外、またはスリットの真上)かどうかを判定する(自機・敵の影の表示要否に使う)
 function isOffGround(x, z){
@@ -1500,6 +1498,24 @@ const FLOOR_TILE_SPECS = [
 ];
 let floorTilesReady = false;
 const floorTilePieces = []; // applyWorldScale()からの表示切り替え対象(第二部・第三部でのみ表示する)
+// 写真調の画像テクスチャは.colorの操作だけでは反転できないため、シェーダーに小さな手を加えて
+// 「uInvertが1の間は最終的な色を反転する」機能を持たせたMeshStandardMaterialを作る。
+// canvasへの描き込みは一切行わないため、file://実行時のtainted canvas制約とも無関係(既存のonBeforeCompileの標準的な使い方)
+const floorInvertMaterials = []; // invertWorldColors()から一括でuInvertを切り替えられるよう集めておく
+function createInvertibleFloorMaterial(map){
+  const mat = new THREE.MeshStandardMaterial({ map, roughness:1, metalness:0 });
+  const invertUniform = { value:0 };
+  mat.userData.invertUniform = invertUniform;
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uInvert = invertUniform;
+    shader.fragmentShader = 'uniform float uInvert;\n' + shader.fragmentShader.replace(
+      '#include <dithering_fragment>',
+      'gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(1.0) - gl_FragColor.rgb, uInvert);\n#include <dithering_fragment>'
+    );
+  };
+  floorInvertMaterials.push(mat);
+  return mat;
+}
 function updateFloorTileVisibility(){
   if (!floorTilesReady) return;
   floorTilePieces.forEach(im => { im.visible = slitEnabled; }); // slitEnabled=第二部・第三部のみtrue
@@ -1520,7 +1536,7 @@ function updateFloorTileVisibility(){
   });
 })();
 function buildFloorTiles(textures){
-  const floorMats = textures.map(tex => new THREE.MeshStandardMaterial({ map:tex, roughness:1, metalness:0 }));
+  const floorMats = textures.map(tex => createInvertibleFloorMaterial(tex));
   const tileGeo = new THREE.PlaneGeometry(FLOOR_TILE_SIZE, FLOOR_TILE_SIZE);
   // 重みの累積値。マス目ごとの乱数がどの区間に入るかでどの柄を使うか決める
   const cumWeights = [];
@@ -1540,11 +1556,9 @@ function buildFloorTiles(textures){
     for (let iz=0; iz<n; iz++){
       const cx = -half + FLOOR_TILE_SIZE*(ix+0.5);
       const cz = -half + FLOOR_TILE_SIZE*(iz+0.5);
-      // スリット(裂け目)と重なるマスには配置しない(下の格子模様の穴がそのまま見えるようにする)。
+      // スリット(裂け目、四隅を含む正方形リング)と重なるマスには配置しない(下の格子模様の穴がそのまま見えるようにする)。
       // タイル境界とスリットの境界が50m単位でぴったり揃っているため、中心座標だけの判定で過不足なく除外できる
-      const onNS = Math.abs(Math.abs(cz)-SLIT_DIST) <= SLIT_WIDTH/2 && Math.abs(cx) <= SLIT_SPAN/2;
-      const onEW = Math.abs(Math.abs(cx)-SLIT_DIST) <= SLIT_WIDTH/2 && Math.abs(cz) <= SLIT_SPAN/2;
-      if (onNS || onEW) continue;
+      if (Math.abs(Math.max(Math.abs(cx), Math.abs(cz)) - SLIT_DIST) <= SLIT_WIDTH/2) continue;
       const r = cellRandom(ix, iz);
       let matIndex = cumWeights.length-1;
       for (let i=0;i<cumWeights.length;i++){ if (r < cumWeights[i]){ matIndex = i; break; } }
@@ -1566,6 +1580,7 @@ function buildFloorTiles(textures){
     floorTilePieces.push(im);
   }
   floorTilesReady = true;
+  floorMats.forEach(m => { m.userData.invertUniform.value = theWorldActive ? 1 : 0; }); // 読み込み完了時点で既にザ・世界発動中だった場合に備える
   updateFloorTileVisibility(); // 読み込み完了時点で既に難易度が確定していた場合に備え、現在の状態を反映する
 }
 
@@ -1946,6 +1961,18 @@ function qblockLastWarningCount(diff){
   return qblockTotalCount - 1;
 }
 
+// 生成した座標がスリット(裂け目)の穴の中に入ってしまった場合、向き(原点から見た角度)はそのままに、
+// 一番近い盤面(内側の島、または外側エリア)へ半径方向に押し出す(第一部・VS Modeはスリット自体が無いため何もしない)
+function pushOutOfSlitGap(x, z){
+  if (!slitEnabled) return { x, z };
+  const m = Math.max(Math.abs(x), Math.abs(z));
+  if (m < 0.001 || !isInSlitGap(x, z)) return { x, z };
+  const innerEdge = curSlitDist - curSlitWidth/2 - 1; // 内側の島ぎりぎり(1mの余裕を残す)
+  const outerEdge = curSlitDist + curSlitWidth/2 + 1; // 外側エリアぎりぎり
+  const newM = (m - innerEdge <= outerEdge - m) ? innerEdge : outerEdge; // 内側・外側どちらに近いかで振り分ける
+  const scale = newM / m;
+  return { x: x*scale, z: z*scale };
+}
 function placeQBlocks(){
   const placed = [];
   let attempts = 0;
@@ -1959,8 +1986,9 @@ function placeQBlocks(){
   let count = 0;
   while (count < target && attempts < qblocks.length*50){
     attempts++;
-    const x = (Math.random()*2-1)*curQblockAreaHalf;
-    const z = (Math.random()*2-1)*curQblockAreaHalf;
+    let x = (Math.random()*2-1)*curQblockAreaHalf;
+    let z = (Math.random()*2-1)*curQblockAreaHalf;
+    ({ x, z } = pushOutOfSlitGap(x, z)); // スリットの真上に来た場合は最寄りの盤面へ押し出す
     if (Math.hypot(x,z) < curQblockMinFromOrigin) continue;
     let ok = true;
     for (const p of placed){ if (Math.hypot(x-p.x, z-p.z) < curQblockDensityRadius){ ok=false; break; } }
@@ -3261,7 +3289,7 @@ let worldScale = 1.0;
 // 以下は「地面の広さ」に関わる値の、現在の難易度における実効値。0で仮初期化しておき、
 // 実際の値はapplyWorldScale()が(resetGame()から)呼ばれた時点で設定される(この時点ではまだ未定義の定数を参照できないため)
 let curGroundHalf = 0;
-let curSlitDist = 0, curSlitWidth = 0, curSlitSpan = 0;
+let curSlitDist = 0, curSlitWidth = 0;
 let curQblockAreaHalf = 0, curQblockDensityRadius = 0, curQblockMinFromOrigin = 0;
 let curBossOrbitRadius = 0, curBossAngularSpeed = 0;
 let curRadarRange = 0;
@@ -3271,7 +3299,7 @@ let slitEnabled = true; // 第一部ではfalseになり、スリット(裂け�
 function applyWorldScale(diff){
   worldScale = (diff === 1) ? WORLD_SCALE_LV1 : 1.0;
   curGroundHalf = GROUND_HALF*worldScale;
-  curSlitDist = SLIT_DIST*worldScale; curSlitWidth = SLIT_WIDTH*worldScale; curSlitSpan = SLIT_SPAN*worldScale;
+  curSlitDist = SLIT_DIST*worldScale; curSlitWidth = SLIT_WIDTH*worldScale;
   curQblockAreaHalf = QBLOCK_AREA_HALF*worldScale; curQblockDensityRadius = QBLOCK_DENSITY_RADIUS*worldScale; curQblockMinFromOrigin = QBLOCK_MIN_FROM_ORIGIN*worldScale;
   // 第一部は初心者の落下ミスを減らすため、ステージ端からQBLOCK_EDGE_MARGIN_LV1m以上内側にしか配置しない(他の難易度は従来通り)
   if (diff === 1) curQblockAreaHalf = Math.min(curQblockAreaHalf, curGroundHalf - QBLOCK_EDGE_MARGIN_LV1);
@@ -5795,6 +5823,7 @@ function invertWorldColors(active){
   groundSolidPiece.mesh.material = active ? groundSolidPiece.materialsInverted : groundSolidPiece.materials;
   const qm = active ? qblockMatInverted : qblockMat;
   qblocks.forEach(b => { if (b.alive) b.mesh.material = qm; });
+  floorInvertMaterials.forEach(m => { m.userData.invertUniform.value = active ? 1 : 0; }); // 床タイル(写真調の柄)もシェーダーで反転する
 }
 
 function currentTheWorldDuration(){
