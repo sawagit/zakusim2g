@@ -392,7 +392,7 @@
     font-family: -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
     color:#7CFC00; text-shadow:0 0 4px rgba(0,0,0,0.9), 0 0 6px rgba(124,252,0,0.6);
   }
-  .qblockReticle .mark { font-size:20px; font-weight:bold; line-height:1; }
+  .qblockReticle .mark { font-size:100px; font-weight:bold; line-height:1; }
   .qblockReticle .label { font-size:9px; font-weight:bold; letter-spacing:1px; line-height:1; }
   /* 画面外の最も近い物資1つだけを示す方向インジケータ(仕様7)。位置はレーダーの真下に固定し、
      矢印(▶)だけを自機から見た物資の方向(カメラ基準)に応じて回転させる。文字ラベルは回転しない */
@@ -711,7 +711,7 @@ const JUMP_LANDING_SPEEDUP = 2.0;
 const JUMP_V0 = 15*JUMP_LANDING_SPEEDUP;
 const JUMP_GRAVITY = GRAVITY*JUMP_LANDING_SPEEDUP*JUMP_LANDING_SPEEDUP; // 9.8×2.0²=39.2m/s²
 // 多段ジャンプ(空中で再度ジャンプ入力を受けると、その場からもう一度上昇を始める。回数制限なし)
-const MULTIJUMP_TURN_MULT = 0.2; // 通常の旋回速度に対する倍率(1/5。等倍だと回りすぎるとの指摘を受けて調整)
+const MULTIJUMP_TURN_MULT = 0.4; // 通常の旋回速度に対する倍率(当初1/5だったが、多段ジャンプ中の空中制御をもっと効かせたいとの指摘を受け倍(2/5)に変更)
 const AIR_POSE_T=0.15;
 const AIR = {
   rHip:-31.5*D2R, rKnee:-6.9*D2R,
@@ -3920,7 +3920,7 @@ function resetGame(){
   document.body.classList.remove('vs-mode');
   for (const k in keysDown) keysDown[k] = false; // デモの自動プレイ入力等が押しっぱなしのまま残ってしまうのを防ぐ(通常のキー入力もここで一旦すべて解放する)
   characterRoot.visible = true;
-  pos.x = 0; pos.z = 0; yaw = 0;
+  pos.x = 0; pos.z = 200; yaw = 0; // 第一部・第二部・第三部とも、旧来の開始位置(原点、エリア中央)から200m手前(+Z側。forwardは-Z方向なので前進すると中央に近づく)に変更
   airY = 0; vy = 0;
   inAir = false;
   poseSlideSpeed = 0;
