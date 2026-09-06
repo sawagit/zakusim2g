@@ -491,7 +491,7 @@
     .lifePip { width:8px; height:8px; border-radius:2px; }
     #timer { font-size:10px; padding:3px 7px; }
     #distance { font-size:7px; padding:2px 7px; }
-    #tutorialHint { font-size:8px; padding:4px 8px; }
+    #tutorialHint { padding:4px 8px; } /* 文字サイズは縮小前(pointer:coarse共通の12px)に戻す。8pxでは読みづらいとの指摘のため */
     #resetBtn, #pauseBtn, #fullscreenBtn { font-size:7px; padding:3px 7px; }
     #pauseBtn, #fullscreenBtn { padding:3px 6px; }
     #vsPlayerResource { padding:3px 5px; }
@@ -2220,6 +2220,27 @@ function updateBoss(dt){
   bossShadowMesh.scale.set(bossSizeMult, bossSizeMult, bossSizeMult);
   bossShadowMesh.visible = !isOffGround(bossX, bossZ); // ステージ外・スリット上には影を落とさない
   // ラスボスブロックの撃破判定はタッチ(接触)ではなく、ジョジョ立ちのヒット判定で行う(詳細はpressJojoを参照)
+}
+
+// ---- ボスへの体当たり衝突判定(すり抜け防止) ----
+// ボスはこれまで見た目だけの存在で、プレイヤーの体がそのままめり込んで通り抜けられてしまっていた。
+// プレイヤーの体(足元airY〜頭頂airY+CHAR_HEIGHT)がボスの上下範囲と重なっている状態で水平距離が近づきすぎたら、
+// ボスの外周まで押し戻し、壁にはじかれたように見せる(フェーズ2で縮小した場合はbossSizeMultに応じて判定も縮む)
+const PLAYER_COLLIDE_RADIUS = 2.5; // 体当たり判定用の簡易な水平半径(胴体幅+腕の張り出し程度)
+function updateBossCollision(){
+  if (!bossActive || bossDefeatFalling) return;
+  const by = currentBossY();
+  const bossHalf = BOSS_SIZE/2*bossSizeMult;
+  const headY = airY + CHAR_HEIGHT;
+  if (headY < by - bossHalf || airY > by + bossHalf) return; // 上下範囲が重ならなければ判定しない(通常はジャンプで重なる高さ)
+  const dx = pos.x - bossX, dz = pos.z - bossZ;
+  const dist = Math.hypot(dx, dz);
+  const minDist = bossHalf + PLAYER_COLLIDE_RADIUS;
+  if (dist < minDist){
+    const ux = dist < 0.001 ? 0 : dx/dist, uz = dist < 0.001 ? 1 : dz/dist; // 中心が完全に重なった場合の保険(+Z方向へ押し出す)
+    pos.x = bossX + ux*minDist;
+    pos.z = bossZ + uz*minDist;
+  }
 }
 
 // ---- 撃破後の演出: その場で即爆発するのではなく、煙を出しながら地面まで落下してから爆発する ----
@@ -5762,11 +5783,21 @@ function triggerForm2(){
   if (!vsMode) awardTrophy('first_form2'); // VS Modeはトロフィーと非連動の独立モードのため
 }
 
+const FORM2_WARNING_TIME = 5.0;         // 秒。解除される何秒前から警告点滅を始めるか
+const FORM2_WARNING_BLINK_PERIOD = 0.3; // 点滅の周期(秒)。ピンク⇔元の色を交互に切り替える
 function updateForm2(dt){
   if (playerForm !== 2) return;
   if (form2Infinite) return; // 全？ブロック取得後は時間経過による自動解除を行わない(ドクロに当たった場合のみフォーム1に戻る)
   if (theWorldActive) return; // ザ・世界発動中は、ドクロ等と同様にフォーム2の残り時間も進行を止める
   form2Timer += dt;
+  // 解除の5秒前から、ピンク(フォーム2色)と元の色(解除後に戻る色)を交互に点滅させて警告する
+  // (裏技のオーラ点滅中はそちらの点滅を優先し、ここでは上書きしない)
+  const remaining = FORM2_DURATION - form2Timer;
+  if (remaining > 0 && remaining <= FORM2_WARNING_TIME && hiddenAuraTimer < 0){
+    const blinkOn = Math.floor(form2Timer / FORM2_WARNING_BLINK_PERIOD) % 2 === 0;
+    const revertedColor = theWorldCharged ? THE_WORLD_READY_COLOR : (difficulty === 3 ? PART3_FORM1_COLOR : COL_BODY);
+    bodyMat.color.setHex(blinkOn ? FORM2_COLOR : applyDamageDarken(revertedColor));
+  }
   if (form2Timer >= FORM2_DURATION){
     playerForm = 1;
     updatePlayerAppearance();
@@ -6755,6 +6786,7 @@ function loop(now){
     updateQBlock(dt);
     updateTheWorld(dt);
     updateBoss(dt);
+    updateBossCollision(); // ボスへの体当たり判定(すり抜け防止)
     updateBossDefeatFall(dt); // ラスボス撃破後、煙を出しながら落下→爆発する演出(state==='victory'の間も進める必要がある)
     updateRadar();
     updateCpu(dt); // VS Mode専用(vsMode===falseなら内部で即return)
