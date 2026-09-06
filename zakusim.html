@@ -1537,9 +1537,12 @@ function buildFloorTiles(textures){
       dummy.rotation.set(-Math.PI/2, 0, spin);
       dummy.updateMatrix();
       solidMatrices[matIndex].push(dummy.matrix.clone());
-      // 第二部・第三部用: スリット(裂け目)の実際の穴と重なるマスには配置しない(下の格子模様の穴がそのまま見えるようにする)
-      const onNS = Math.abs(Math.abs(cz)-SLIT_DIST) <= SLIT_WIDTH/2 && Math.abs(cx) <= SLIT_SPAN/2;
-      const onEW = Math.abs(Math.abs(cx)-SLIT_DIST) <= SLIT_WIDTH/2 && Math.abs(cz) <= SLIT_SPAN/2;
+      // 第二部・第三部用: スリット(裂け目)の実際の穴とタイルの正方形の範囲(中心だけでなく1枚ぶんの一辺の半分まで)が
+      // 少しでも重なる場合は配置しない(下の格子模様の穴が隠れてしまい、スリットが見えなくなるのを防ぐ。
+      // タイルが大きい(FLOOR_TILE_SIZE=100m)ため、中心座標だけでの判定だと1枚も除外されずスリット全体を覆ってしまっていた)
+      const tileHalf = FLOOR_TILE_SIZE/2;
+      const onNS = Math.abs(Math.abs(cz)-SLIT_DIST) <= SLIT_WIDTH/2+tileHalf && Math.abs(cx) <= SLIT_SPAN/2+tileHalf;
+      const onEW = Math.abs(Math.abs(cx)-SLIT_DIST) <= SLIT_WIDTH/2+tileHalf && Math.abs(cz) <= SLIT_SPAN/2+tileHalf;
       if (!onNS && !onEW) slitMatrices[matIndex].push(dummy.matrix.clone());
     }
   }
