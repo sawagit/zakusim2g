@@ -3770,7 +3770,7 @@ function startGame(diff, invincible, vs){
   soundEnabled = document.getElementById('soundEnabledCheck').checked; // 同じくチェックボックスを反映(デフォルトはオン)
   useClassicBgm = document.getElementById('classicBgmCheck').checked; // BGM音源(既定は新曲のMP3、チェックで従来のチップチューン生成音源に戻す)
   gyroLookEnabled = document.getElementById('gyroLookCheck').checked;
-  gyroYawOffset = 0; gyroPitchOffset = 0; gyroBaseLR = null; gyroBaseFB = null; // 毎回、この瞬間に構えている向きを基準(0°)に取り直す
+  gyroYawOffset = 0; gyroPitchOffset = 0; gyroYawTarget = 0; gyroPitchTarget = 0; gyroBaseLR = null; gyroBaseFB = null; // 毎回、この瞬間に構えている向きを基準(0°)に取り直す
   if (gyroLookEnabled) ensureGyroLook();
   tutorialActive = !vsMode && diff === 1 && document.getElementById('tutorialCheck').checked; // VS Modeでは通常のチュートリアル(ステップ1〜4)は出さない
   tutorialPhase4Timer = -1;
@@ -3922,7 +3922,7 @@ function resetGame(){
 
   camYaw = yaw; moveRefYaw = yaw; // カメラ・移動基準角とも機体の正面へ即座に合わせ直す(遅れ追従の演出はプレイ中だけのものなので、リセット時は前回の名残りを引きずらない)
   camPitch = 16.0*D2R;
-  gyroYawOffset = 0; gyroPitchOffset = 0; gyroBaseLR = null; gyroBaseFB = null; // ジャイロ視点のオフセットも次回開始時に取り直す
+  gyroYawOffset = 0; gyroPitchOffset = 0; gyroYawTarget = 0; gyroPitchTarget = 0; gyroBaseLR = null; gyroBaseFB = null; // ジャイロ視点のオフセットも次回開始時に取り直す
   // カメラのズームも初期値へ戻す(デモ中のズーム往復などの名残りを引きずらないようにする)。
   // スマホ等を縦向きで持っている間は画面が縦長で視野が狭くなるため、初期ズームを最大広角側(150m)にする
   camDist = (window.matchMedia('(pointer:coarse) and (orientation:portrait)').matches) ? 150 : 75;
@@ -4404,11 +4404,14 @@ let camYaw = 28.6*D2R, camPitch = 16.0*D2R, camDist = 75; // PC・スマホと�
 // ---- ジャイロ視点(スマホの傾きでカメラを上下左右に振る、任意設定。難易度選択画面のチェックボックスでON/OFF) ----
 // あくまで視界自動追従(camYaw/camPitch)を基本軸とし、その上に傾き分のオフセットを上下左右とも最大15°まで上乗せするだけの補助的な演出
 const GYRO_LOOK_MAX_ANGLE = 15*D2R;
+const GYRO_LOOK_SENSITIVITY = 0.5; // 感度(生の傾き角に対する倍率)。酔いにくくするため半分に落とした
+const GYRO_LOOK_SMOOTH_T = 5.0; // 秒。目標値への追従・中央への復帰ともこの時間でおよそ99%追いつく(急な動きを抑えて酔いにくくする)
 let gyroLookEnabled = false;      // このプレイでジャイロ視点を使うか(startGame()でチェックボックスから読み込む)
 let gyroPermissionRequested = false; // iOSの許可ダイアログを一度リクエストしたら再度呼ばない
 let gyroListenerAttached = false;
 let gyroBaseLR = null, gyroBaseFB = null; // 有効化後、最初に届いたセンサー値をその場の「まっすぐ」(オフセット0)とみなす基準値
-let gyroYawOffset = 0, gyroPitchOffset = 0; // updateCamera()側でcamYaw/camPitchに上乗せする値(ラジアン)
+let gyroYawTarget = 0, gyroPitchTarget = 0; // センサーの生値から計算した「本来向くべき」目標オフセット(ラジアン)
+let gyroYawOffset = 0, gyroPitchOffset = 0; // 実際にupdateCamera()側で使う値。目標値へゆっくり追従させる(なめらかにするため)
 // 画面の向き(縦/横)によって生のbeta/gammaの意味が変わるため、画面基準の「左右方向の傾き」「前後方向の傾き」に補正する
 // (定番の補正式。参考: MDN DeviceOrientationEvent / 各種チルト操作の実装例)
 function gyroScreenTilt(beta, gamma){
@@ -4422,8 +4425,9 @@ function handleGyroOrientation(e){
   if (!gyroLookEnabled || e.beta === null || e.gamma === null) return; // センサー非搭載機種は無反応のまま
   const { lr, fb } = gyroScreenTilt(e.beta, e.gamma);
   if (gyroBaseLR === null){ gyroBaseLR = lr; gyroBaseFB = fb; } // 有効化した瞬間に構えていた向きを基準(0°)にする
-  gyroYawOffset = clamp((lr-gyroBaseLR)*D2R, -GYRO_LOOK_MAX_ANGLE, GYRO_LOOK_MAX_ANGLE);
-  gyroPitchOffset = clamp((fb-gyroBaseFB)*D2R, -GYRO_LOOK_MAX_ANGLE, GYRO_LOOK_MAX_ANGLE);
+  // ここでは目標値を更新するだけで、実際に使う値(gyroYawOffset/gyroPitchOffset)はupdateCamera()側でなめらかに追従させる
+  gyroYawTarget = clamp((lr-gyroBaseLR)*GYRO_LOOK_SENSITIVITY*D2R, -GYRO_LOOK_MAX_ANGLE, GYRO_LOOK_MAX_ANGLE);
+  gyroPitchTarget = clamp((fb-gyroBaseFB)*GYRO_LOOK_SENSITIVITY*D2R, -GYRO_LOOK_MAX_ANGLE, GYRO_LOOK_MAX_ANGLE);
 }
 // チェックボックスがONの状態でゲームを開始した瞬間に呼ぶ。iOSは必ずユーザー操作(ボタン押下等)の延長で許可を求める必要があるため、
 // startGame()というクリック/タップ起点の関数から直接呼ぶことでその条件を満たす
@@ -4730,7 +4734,11 @@ function updateCamera(dt){
   const jumpPullBack = inAir ? Math.min(airY*JUMP_CAM_PULLBACK_FACTOR, JUMP_CAM_PULLBACK_MAX) : 0;
   const effDist = camDist + jumpPullBack;
   // ジャイロ視点(有効時のみ): 自動追従で決まったcamYaw/camPitchはそのまま(=基本軸)に、
-  // 傾きに応じた上下左右±15°のオフセットを見た目にだけ上乗せする(camYaw/camPitch自体は書き換えない)
+  // 傾きに応じた上下左右±15°のオフセットを見た目にだけ上乗せする(camYaw/camPitch自体は書き換えない)。
+  // 目標値(gyroYawTarget/gyroPitchTarget)へ瞬時に合わせず、GYRO_LOOK_SMOOTH_Tの時間をかけてゆっくり追従させることで、
+  // 傾きが小刻みに揺れても酔いにくくし、傾きを戻したときも中央へゆっくり(約5秒)戻るようにする
+  gyroYawOffset = convergeAngle(gyroYawOffset, gyroYawTarget, dt, GYRO_LOOK_SMOOTH_T);
+  gyroPitchOffset = convergeAngle(gyroPitchOffset, gyroPitchTarget, dt, GYRO_LOOK_SMOOTH_T);
   const effYaw = camYaw + gyroYawOffset;
   const effPitch = clamp(camPitch + gyroPitchOffset, 5*D2R, 85*D2R);
   camera.position.x = tx + effDist*Math.cos(effPitch)*Math.sin(effYaw);
