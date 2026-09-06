@@ -217,14 +217,11 @@
     border-color:rgba(255,140,110,0.75); box-shadow:0 0 14px rgba(255,90,60,0.35);
   }
   .diffbtn.vsmode:active { background:rgba(255,90,60,0.5); }
-  #autoRotateLabel, #soundLabel, #tutorialLabel {
+  #soundLabel {
     display:flex; align-items:center; gap:10px; margin-top:clamp(16px,4.5vw,28px);
     font-size:clamp(13px,3.7vw,16px); color:#fff; user-select:none; cursor:pointer;
   }
-  /* 表示順(チュートリアル→音あり→視点変更)に合わせ、2番目以降の項目は詰めた間隔にする */
-  #soundLabel, #autoRotateLabel { margin-top:clamp(10px,2.8vw,14px); }
-  #autoRotateLabel { font-size:clamp(6.5px,1.85vw,8px); } /* 視点変更のみフォントサイズを半分にする */
-  #autoRotateLabel input[type="checkbox"], #soundLabel input[type="checkbox"], #tutorialLabel input[type="checkbox"] { width:20px; height:20px; cursor:pointer; flex-shrink:0; }
+  #soundLabel input[type="checkbox"] { width:20px; height:20px; cursor:pointer; flex-shrink:0; }
   #usageLink, #goUsageLink {
     display:inline-block; margin-top:clamp(14px,3.8vw,22px);
     font-family: -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
@@ -242,6 +239,13 @@
     background:none; border:none; padding:0; -webkit-tap-highlight-color:transparent;
   }
   #rankingBtn:hover { color:#fff; }
+  #settingsBtn {
+    display:inline-block; margin-top:clamp(8px,2.4vw,12px); margin-right:14px;
+    font-family: -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+    font-size:clamp(12px,3.4vw,15px); color:#ffdd66; text-decoration:underline; cursor:pointer;
+    background:none; border:none; padding:0; -webkit-tap-highlight-color:transparent;
+  }
+  #settingsBtn:hover { color:#fff; }
   #goNameEntry {
     display:none; align-items:center; gap:8px; margin-top:10px; flex-wrap:wrap; justify-content:center;
   }
@@ -250,7 +254,7 @@
     font-size:16px; padding:6px 10px; border-radius:6px; border:2px solid rgba(125,220,255,0.65);
     background:rgba(255,255,255,0.92); color:#222; width:150px; text-align:center;
   }
-  #goNameSubmit, #rankingCloseBtn, #goDigestReplayBtn, #goBackBtn, #vsResultBackBtn {
+  #goNameSubmit, #rankingCloseBtn, #settingsCloseBtn, #goDigestReplayBtn, #goBackBtn, #vsResultBackBtn {
     font-family: -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
     font-size:14px; font-weight:bold; color:#04151c;
     background:linear-gradient(180deg, rgba(125,220,255,0.9), rgba(77,200,255,0.75));
@@ -285,6 +289,27 @@
   .trophyRow { font-size:13px; padding:2px 0; white-space:normal; }
   .rankingNote { font-size:11px; opacity:0.6; margin-top:14px; }
   #rankingCloseBtn { margin-top:16px; padding:8px 22px; }
+  /* ---- 設定オーバーレイ(ランキングと同じ見た目のモーダルパネル)。今後もオプションを増やせるよう、
+     チェックボックス項目は.settingsOptionクラスの<label>を追加するだけで揃った見た目になる ---- */
+  #settingsOverlay {
+    display:none; position:fixed; left:0; top:0; width:100%; height:100%; z-index:25;
+    align-items:center; justify-content:center; background:rgba(0,0,0,0.75);
+    font-family: -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+    padding:20px; box-sizing:border-box;
+  }
+  .settingsPanel {
+    background:radial-gradient(ellipse at 50% 20%, rgba(40,70,100,0.92), rgba(10,14,20,0.97));
+    border:2px solid rgba(125,220,255,0.5); border-radius:12px;
+    padding:clamp(18px,4vw,28px) clamp(20px,5vw,34px); max-width:420px; width:100%; max-height:85vh; overflow-y:auto;
+    color:#fff; text-align:center; box-sizing:border-box;
+  }
+  .settingsTitle { font-size:clamp(18px,4.5vw,24px); font-weight:900; color:#ffdd66; margin-bottom:16px; letter-spacing:1px; }
+  .settingsOption {
+    display:flex; align-items:center; gap:10px; margin-top:14px;
+    font-size:clamp(13px,3.7vw,16px); color:#fff; user-select:none; cursor:pointer; text-align:left;
+  }
+  .settingsOption input[type="checkbox"] { width:20px; height:20px; cursor:pointer; flex-shrink:0; }
+  #settingsCloseBtn { margin-top:20px; padding:8px 22px; }
   #rankingCorner {
     display:none; position:fixed; bottom:210px; left:14px; z-index:13;
     background:rgba(10,14,20,0.72); border:1px solid rgba(125,220,255,0.4); border-radius:8px;
@@ -448,9 +473,8 @@
     #difficulty .title { font-size:clamp(11px,3.4vh,20px); margin-bottom:clamp(6px,2.4vh,16px); }
     #diffButtons { margin-top:2px; gap:10px; }
     .diffbtn { padding:clamp(6px,1.8vh,10px) clamp(12px,3vh,18px); font-size:clamp(12px,3vh,16px); }
-    #autoRotateLabel, #soundLabel, #tutorialLabel { margin-top:clamp(5px,1.6vh,14px); gap:8px; font-size:clamp(10px,2.6vh,13px); }
-    #autoRotateLabel { font-size:clamp(5px,1.3vh,6.5px); } /* 視点変更のみフォントサイズを半分にする */
-    #autoRotateLabel input[type="checkbox"], #soundLabel input[type="checkbox"], #tutorialLabel input[type="checkbox"] { width:16px; height:16px; }
+    #soundLabel { margin-top:clamp(5px,1.6vh,14px); gap:8px; font-size:clamp(10px,2.6vh,13px); }
+    #soundLabel input[type="checkbox"] { width:16px; height:16px; }
     #usageLink { margin-top:clamp(5px,1.6vh,10px); font-size:clamp(10px,2.4vh,12px); }
     #difficulty .credit, #gameover .credit { bottom:4px; font-size:9px; }
 
@@ -583,22 +607,30 @@
     <button type="button" class="diffbtn part3" id="diffBtn3" style="display:none;">第三部</button>
     <button type="button" class="diffbtn vsmode" id="diffBtnVs" style="display:none;">⚔️ VS Mode</button>
   </div>
-  <label id="tutorialLabel">
-    <input type="checkbox" id="tutorialCheck" checked>
-    チュートリアル(第一部のみ)
-  </label>
   <label id="soundLabel">
     <input type="checkbox" id="soundEnabledCheck" checked>
     音あり
   </label>
-  <label id="autoRotateLabel">
-    <input type="checkbox" id="autoRotateCheck" checked>
-    視界自動回転(常に背中を見る)
-  </label>
   <a id="usageLink" href="https://zakusim2g.vercel.app/usage.html" target="_blank" rel="noopener">📖 遊び方を見る</a>
   <br>
+  <button type="button" id="settingsBtn">⚙️ 設定</button>
   <button type="button" id="rankingBtn">🏆 ランキングを見る</button>
   <div class="credit">Designed by やっさん / Programed by Claude Code</div>
+</div>
+
+<div id="settingsOverlay">
+  <div class="settingsPanel">
+    <div class="settingsTitle">⚙️ 設定</div>
+    <label id="tutorialLabel" class="settingsOption">
+      <input type="checkbox" id="tutorialCheck" checked>
+      チュートリアル(第一部のみ)
+    </label>
+    <label id="autoRotateLabel" class="settingsOption">
+      <input type="checkbox" id="autoRotateCheck" checked>
+      視界自動回転(常に背中を見る)
+    </label>
+    <button type="button" id="settingsCloseBtn">閉じる</button>
+  </div>
 </div>
 
 <div id="rankingOverlay">
@@ -634,7 +666,7 @@
       </div>
     </div>
     <div class="rankingTrophies">
-      <div class="rankingColTitle">獲得済みトロフィー(<span id="trophyOwnedCount">0</span>/21)</div>
+      <div class="rankingColTitle">獲得済みトロフィー(<span id="trophyOwnedCount">0</span>/22)</div>
       <div id="trophyOwnedList"></div>
     </div>
     <div class="rankingNote">※上段はこの端末のブラウザだけに保存されたローカル記録です。世界ランキングはラスボスを撃破してニックネームを登録すると、そのタイムと名前が全プレイヤーに公開される形で送信されます。</div>
@@ -3131,6 +3163,7 @@ const goNameInputEl = document.getElementById('goNameInput');
 const btnTetsuEl = document.getElementById('btnTetsu'); // スマホ等のザ・世界ボタン(使用可能になるまで非表示、可能になったら点滅させる)
 const IS_TOUCH_DEVICE = window.matchMedia('(pointer:coarse)').matches; // スマホ等タッチ操作が主のデバイスかどうか(ボタン点滅で足りるため、使用可能トーストを省略する判定に使う)
 const rankingOverlayEl = document.getElementById('rankingOverlay');
+const settingsOverlayEl = document.getElementById('settingsOverlay');
 const rankingCornerEl = document.getElementById('rankingCorner');
 const goSubEl = document.getElementById('goSub');
 const theWorldBannerEl = document.getElementById('theWorldBanner');
@@ -3236,6 +3269,7 @@ function buildOwnedTrophiesHTML(){
   return '<div class="trophyGrid">' + ids.map(id => '<div class="trophyRow">👴🏾🏆 '+escapeHtml(TROPHIES[id])+'</div>').join('') + '</div>';
 }
 function openRankingOverlay(){
+  closeSettingsOverlay(); // 設定オーバーレイと同時に開かないようにする
   document.getElementById('rankingListLv1').innerHTML = buildRankingColumnHTML(1);
   document.getElementById('rankingListLv2').innerHTML = buildRankingColumnHTML(2);
   document.getElementById('rankingColLv3').style.display = part3Unlocked ? 'block' : 'none';
@@ -3252,6 +3286,16 @@ function openRankingOverlay(){
 function closeRankingOverlay(){
   rankingOverlayOpen = false;
   rankingOverlayEl.style.display = 'none';
+}
+// ---- 設定オーバーレイ(チュートリアル・視点自動回転のチェックボックスをまとめた画面。今後もオプションを追加していく想定) ----
+function openSettingsOverlay(){
+  closeRankingOverlay(); // ランキングオーバーレイと同時に開かないようにする
+  settingsOverlayOpen = true;
+  settingsOverlayEl.style.display = 'flex';
+}
+function closeSettingsOverlay(){
+  settingsOverlayOpen = false;
+  settingsOverlayEl.style.display = 'none';
 }
 function showDemoRanking(){
   rankingCornerEl.innerHTML =
@@ -3501,6 +3545,7 @@ let titleIdleTimer = 0;
 let demoActive = false;
 let demoDiffNext = 1;
 let rankingOverlayOpen = false; // ランキングオーバーレイ表示中はタイトル画面の自動デモ開始タイマーを止める
+let settingsOverlayOpen = false; // 設定オーバーレイ表示中も同様にタイマー・ゲーム開始キーを止める
 const demoLabelEl = document.getElementById('demoLabel');
 const DEMO_ZOOM_PERIOD = 35.0; // 秒。ズーム最大⇔最小を1往復する周期(体感5倍ゆっくりに調整)
 const demoAI = { moveTimer:0, jumpTimer:0, jojoTimer:0, zoomT:0, wentForFirstBlock:false };
@@ -4349,7 +4394,7 @@ window.addEventListener('keydown', (e)=>{
   }
 
   if (awaitingDifficulty){
-    if (rankingOverlayOpen) return; // ランキング表示中はゲーム開始キーを無視する
+    if (rankingOverlayOpen || settingsOverlayOpen) return; // ランキング・設定表示中はゲーム開始キーを無視する
     // カーソルキーでボタン選択(フォーカス移動)、Enterで決定。PCコントローラーのフォーカス移動・A決定と同じ処理を共有する
     if (!e.repeat && (e.key === 'ArrowLeft' || e.key === 'ArrowUp')){ e.preventDefault(); gpMoveFocus(-1); return; }
     if (!e.repeat && (e.key === 'ArrowRight' || e.key === 'ArrowDown')){ e.preventDefault(); gpMoveFocus(1); return; }
@@ -4566,6 +4611,18 @@ rankingCloseBtnEl.addEventListener('touchstart', (e)=>{ e.preventDefault(); e.st
 rankingOverlayEl.addEventListener('click', (e)=>{ if (e.target === rankingOverlayEl) closeRankingOverlay(); });
 rankingOverlayEl.addEventListener('touchstart', (e)=>{ if (e.target === rankingOverlayEl){ e.preventDefault(); closeRankingOverlay(); } }, { passive:false });
 
+// 設定(チュートリアル・視点自動回転)。タイトル画面のボタンから開閉する。今後オプションを増やす場合は
+// #settingsOverlay内に.settingsOptionクラスの<label>を追加するだけでよい(開閉の仕組み自体は変更不要)
+const settingsBtnEl = document.getElementById('settingsBtn');
+settingsBtnEl.addEventListener('click', (e)=>{ e.stopPropagation(); ensureAudio(); openSettingsOverlay(); });
+settingsBtnEl.addEventListener('touchstart', (e)=>{ e.preventDefault(); e.stopPropagation(); ensureAudio(); openSettingsOverlay(); }, { passive:false });
+const settingsCloseBtnEl = document.getElementById('settingsCloseBtn');
+settingsCloseBtnEl.addEventListener('click', (e)=>{ e.stopPropagation(); closeSettingsOverlay(); });
+settingsCloseBtnEl.addEventListener('touchstart', (e)=>{ e.preventDefault(); e.stopPropagation(); closeSettingsOverlay(); }, { passive:false });
+// パネルの外側(背景)をタップ/クリックしても閉じる
+settingsOverlayEl.addEventListener('click', (e)=>{ if (e.target === settingsOverlayEl) closeSettingsOverlay(); });
+settingsOverlayEl.addEventListener('touchstart', (e)=>{ if (e.target === settingsOverlayEl){ e.preventDefault(); closeSettingsOverlay(); } }, { passive:false });
+
 gameoverEl.addEventListener('touchstart', (e)=>{ e.preventDefault(); ensureAudio(); if (gameOver && !awaitingNameEntry && gameOverTimer >= GAMEOVER_WAIT_TIME) resetGame(); }, { passive:false });
 gameoverEl.addEventListener('click', (e)=>{ ensureAudio(); if (gameOver && !awaitingNameEntry && gameOverTimer >= GAMEOVER_WAIT_TIME) resetGame(); }); // Press Any KeyはPCのマウスクリックでも反応させる
 // GAME OVER画面内の「遊び方を見る」リンク・ニックネーム入力欄は、親要素(#gameover)のタップ/クリック=リセット処理に巻き込まれないようにする
@@ -4772,7 +4829,7 @@ function gpPressDir(dir){
 // ---- PCコントローラーでのメニューボタン操作(スティック/十字キーでフォーカス移動、Aボタンで決定) ----
 // 画面ごとに「今フォーカス移動・A決定の対象にするボタン一覧」を、表示中のものだけDOM順で返す
 function gpNavButtons(){
-  if (awaitingDifficulty && !rankingOverlayOpen){
+  if (awaitingDifficulty && !rankingOverlayOpen && !settingsOverlayOpen){
     return [
       document.getElementById('diffBtn1'),
       document.getElementById('diffBtn2'),
@@ -4865,7 +4922,7 @@ function updateGamepadInner(dt){
   if (digestPlaybackActive){ if (anyPressed) finishDigestPlayback(); return; } // ハイライトダイジェスト再生中はコントローラー操作でもスキップする
 
   if (awaitingDifficulty){
-    if (rankingOverlayOpen) return;
+    if (rankingOverlayOpen || settingsOverlayOpen) return;
     // モード選択ボタンはスティック(または十字キー)でフォーカス移動、Aボタンで決定する
     const dlx = gp.axes[0] || 0, dly = gp.axes[1] || 0;
     const stickStep = gpMenuStickStep(dlx, dly);
@@ -6941,7 +6998,7 @@ function loop(now){
   updateGamepad(dt); // ゲームパッド接続中のみ内部で処理する。状態(タイトル/プレイ中/ポーズ等)ごとの分岐は関数内で完結させている
   updateTutorialIntro(dt); // チュートリアル導入メッセージ(メッセージ0)の10秒タイマー。paused中でも進める必要があるため通常のゲート外で呼ぶ
 
-  if (awaitingDifficulty && !rankingOverlayOpen){
+  if (awaitingDifficulty && !rankingOverlayOpen && !settingsOverlayOpen){
     if (diffPressActive){
       titleIdleTimer = 0; // 無敵モード判定の長押し中は自動デモの開始タイマーを進めない(離すと通常通りゼロから再開する)
     } else {
