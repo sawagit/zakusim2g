@@ -216,14 +216,14 @@
     border-color:rgba(255,140,110,0.75); box-shadow:0 0 14px rgba(255,90,60,0.35);
   }
   .diffbtn.vsmode:active { background:rgba(255,90,60,0.5); }
-  #autoRotateLabel, #soundLabel, #tutorialLabel, #classicBgmLabel {
+  #autoRotateLabel, #soundLabel, #tutorialLabel, #classicBgmLabel, #gyroLookLabel {
     display:flex; align-items:center; gap:10px; margin-top:clamp(16px,4.5vw,28px);
     font-size:clamp(13px,3.7vw,16px); color:#fff; user-select:none; cursor:pointer;
   }
-  /* 表示順(チュートリアル→音あり→視点変更→BGM切替)に合わせ、2番目以降の項目は詰めた間隔にする */
-  #soundLabel, #autoRotateLabel, #classicBgmLabel { margin-top:clamp(10px,2.8vw,14px); }
+  /* 表示順(チュートリアル→音あり→視点変更→BGM切替→ジャイロ視点)に合わせ、2番目以降の項目は詰めた間隔にする */
+  #soundLabel, #autoRotateLabel, #classicBgmLabel, #gyroLookLabel { margin-top:clamp(10px,2.8vw,14px); }
   #autoRotateLabel { font-size:clamp(6.5px,1.85vw,8px); } /* 視点変更のみフォントサイズを半分にする */
-  #autoRotateLabel input[type="checkbox"], #soundLabel input[type="checkbox"], #tutorialLabel input[type="checkbox"], #classicBgmLabel input[type="checkbox"] { width:20px; height:20px; cursor:pointer; flex-shrink:0; }
+  #autoRotateLabel input[type="checkbox"], #soundLabel input[type="checkbox"], #tutorialLabel input[type="checkbox"], #classicBgmLabel input[type="checkbox"], #gyroLookLabel input[type="checkbox"] { width:20px; height:20px; cursor:pointer; flex-shrink:0; }
   #usageLink, #goUsageLink {
     display:inline-block; margin-top:clamp(14px,3.8vw,22px);
     font-family: -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
@@ -416,9 +416,9 @@
     #difficulty .title { font-size:clamp(11px,3.4vh,20px); margin-bottom:clamp(6px,2.4vh,16px); }
     #diffButtons { margin-top:2px; gap:10px; }
     .diffbtn { padding:clamp(6px,1.8vh,10px) clamp(12px,3vh,18px); font-size:clamp(12px,3vh,16px); }
-    #autoRotateLabel, #soundLabel, #tutorialLabel, #classicBgmLabel { margin-top:clamp(5px,1.6vh,14px); gap:8px; font-size:clamp(10px,2.6vh,13px); }
+    #autoRotateLabel, #soundLabel, #tutorialLabel, #classicBgmLabel, #gyroLookLabel { margin-top:clamp(5px,1.6vh,14px); gap:8px; font-size:clamp(10px,2.6vh,13px); }
     #autoRotateLabel { font-size:clamp(5px,1.3vh,6.5px); } /* 視点変更のみフォントサイズを半分にする */
-    #autoRotateLabel input[type="checkbox"], #soundLabel input[type="checkbox"], #tutorialLabel input[type="checkbox"], #classicBgmLabel input[type="checkbox"] { width:16px; height:16px; }
+    #autoRotateLabel input[type="checkbox"], #soundLabel input[type="checkbox"], #tutorialLabel input[type="checkbox"], #classicBgmLabel input[type="checkbox"], #gyroLookLabel input[type="checkbox"] { width:16px; height:16px; }
     #usageLink { margin-top:clamp(5px,1.6vh,10px); font-size:clamp(10px,2.4vh,12px); }
     #difficulty .credit, #gameover .credit { bottom:4px; font-size:9px; }
 
@@ -563,6 +563,10 @@
   <label id="classicBgmLabel">
     <input type="checkbox" id="classicBgmCheck">
     クラシックBGM(旧サウンド)にする
+  </label>
+  <label id="gyroLookLabel">
+    <input type="checkbox" id="gyroLookCheck">
+    ジャイロで視点を振る(要許可・スマホのみ)
   </label>
   <a id="usageLink" href="https://zakusim2g.vercel.app/usage.html" target="_blank" rel="noopener">📖 遊び方を見る</a>
   <br>
@@ -3765,6 +3769,9 @@ function startGame(diff, invincible, vs){
   cameraAutoRotate = document.getElementById('autoRotateCheck').checked; // 難易度選択画面のチェックボックスを反映(デフォルトはオン)
   soundEnabled = document.getElementById('soundEnabledCheck').checked; // 同じくチェックボックスを反映(デフォルトはオン)
   useClassicBgm = document.getElementById('classicBgmCheck').checked; // BGM音源(既定は新曲のMP3、チェックで従来のチップチューン生成音源に戻す)
+  gyroLookEnabled = document.getElementById('gyroLookCheck').checked;
+  gyroYawOffset = 0; gyroPitchOffset = 0; gyroBaseLR = null; gyroBaseFB = null; // 毎回、この瞬間に構えている向きを基準(0°)に取り直す
+  if (gyroLookEnabled) ensureGyroLook();
   tutorialActive = !vsMode && diff === 1 && document.getElementById('tutorialCheck').checked; // VS Modeでは通常のチュートリアル(ステップ1〜4)は出さない
   tutorialPhase4Timer = -1;
   tutorialHintEl.style.display = 'none';
@@ -3915,6 +3922,7 @@ function resetGame(){
 
   camYaw = yaw; moveRefYaw = yaw; // カメラ・移動基準角とも機体の正面へ即座に合わせ直す(遅れ追従の演出はプレイ中だけのものなので、リセット時は前回の名残りを引きずらない)
   camPitch = 16.0*D2R;
+  gyroYawOffset = 0; gyroPitchOffset = 0; gyroBaseLR = null; gyroBaseFB = null; // ジャイロ視点のオフセットも次回開始時に取り直す
   // カメラのズームも初期値へ戻す(デモ中のズーム往復などの名残りを引きずらないようにする)。
   // スマホ等を縦向きで持っている間は画面が縦長で視野が狭くなるため、初期ズームを最大広角側(150m)にする
   camDist = (window.matchMedia('(pointer:coarse) and (orientation:portrait)').matches) ? 150 : 75;
@@ -4392,6 +4400,47 @@ if (!fullscreenSupported()){
 // カメラ(自前オービット)
 // ============================================================
 let camYaw = 28.6*D2R, camPitch = 16.0*D2R, camDist = 75; // PC・スマホとも初期ズームはワイド側
+
+// ---- ジャイロ視点(スマホの傾きでカメラを上下左右に振る、任意設定。難易度選択画面のチェックボックスでON/OFF) ----
+// あくまで視界自動追従(camYaw/camPitch)を基本軸とし、その上に傾き分のオフセットを上下左右とも最大15°まで上乗せするだけの補助的な演出
+const GYRO_LOOK_MAX_ANGLE = 15*D2R;
+let gyroLookEnabled = false;      // このプレイでジャイロ視点を使うか(startGame()でチェックボックスから読み込む)
+let gyroPermissionRequested = false; // iOSの許可ダイアログを一度リクエストしたら再度呼ばない
+let gyroListenerAttached = false;
+let gyroBaseLR = null, gyroBaseFB = null; // 有効化後、最初に届いたセンサー値をその場の「まっすぐ」(オフセット0)とみなす基準値
+let gyroYawOffset = 0, gyroPitchOffset = 0; // updateCamera()側でcamYaw/camPitchに上乗せする値(ラジアン)
+// 画面の向き(縦/横)によって生のbeta/gammaの意味が変わるため、画面基準の「左右方向の傾き」「前後方向の傾き」に補正する
+// (定番の補正式。参考: MDN DeviceOrientationEvent / 各種チルト操作の実装例)
+function gyroScreenTilt(beta, gamma){
+  const angle = (screen.orientation && screen.orientation.angle) || window.orientation || 0;
+  if (angle === 90) return { lr: -beta, fb: gamma };
+  if (angle === -90 || angle === 270) return { lr: beta, fb: -gamma };
+  if (angle === 180) return { lr: -gamma, fb: -beta };
+  return { lr: gamma, fb: beta }; // angle === 0(通常の縦向き、または向きを取得できない場合)
+}
+function handleGyroOrientation(e){
+  if (!gyroLookEnabled || e.beta === null || e.gamma === null) return; // センサー非搭載機種は無反応のまま
+  const { lr, fb } = gyroScreenTilt(e.beta, e.gamma);
+  if (gyroBaseLR === null){ gyroBaseLR = lr; gyroBaseFB = fb; } // 有効化した瞬間に構えていた向きを基準(0°)にする
+  gyroYawOffset = clamp((lr-gyroBaseLR)*D2R, -GYRO_LOOK_MAX_ANGLE, GYRO_LOOK_MAX_ANGLE);
+  gyroPitchOffset = clamp((fb-gyroBaseFB)*D2R, -GYRO_LOOK_MAX_ANGLE, GYRO_LOOK_MAX_ANGLE);
+}
+// チェックボックスがONの状態でゲームを開始した瞬間に呼ぶ。iOSは必ずユーザー操作(ボタン押下等)の延長で許可を求める必要があるため、
+// startGame()というクリック/タップ起点の関数から直接呼ぶことでその条件を満たす
+function ensureGyroLook(){
+  if (!gyroLookEnabled || gyroListenerAttached) return;
+  if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function'){
+    if (gyroPermissionRequested) return; // 既に一度ダイアログを出して拒否された場合は毎回聞き直さない
+    gyroPermissionRequested = true;
+    DeviceOrientationEvent.requestPermission().then(state => {
+      if (state === 'granted'){ gyroListenerAttached = true; window.addEventListener('deviceorientation', handleGyroOrientation); }
+    }).catch(()=>{});
+  } else if (window.DeviceOrientationEvent){
+    // iOS以外(Android Chrome等)は許可ダイアログ不要でそのまま使える
+    gyroListenerAttached = true;
+    window.addEventListener('deviceorientation', handleGyroOrientation);
+  }
+}
 // 移動方向の基準角(camYawとは独立)。視界自動回転がオフ(固定視点)のときでも、camYawと同じ速さで常にyawへ遅れて追いつき続けることで、
 // ←→を押し続けたときに固定視点でも(自動回転時と同様に)90°で止まらず、緩やかな弧を描き続ける動きになるようにする
 let moveRefYaw = camYaw;
@@ -4680,9 +4729,13 @@ function updateCamera(dt){
   // ジャンプ中(多段ジャンプ含む)は注視点をパンさせず、代わりにカメラを広角側(遠く)へ引いて、高く跳んでも画面から見切れないようにする
   const jumpPullBack = inAir ? Math.min(airY*JUMP_CAM_PULLBACK_FACTOR, JUMP_CAM_PULLBACK_MAX) : 0;
   const effDist = camDist + jumpPullBack;
-  camera.position.x = tx + effDist*Math.cos(camPitch)*Math.sin(camYaw);
-  camera.position.y = ty + effDist*Math.sin(camPitch);
-  camera.position.z = tz + effDist*Math.cos(camPitch)*Math.cos(camYaw);
+  // ジャイロ視点(有効時のみ): 自動追従で決まったcamYaw/camPitchはそのまま(=基本軸)に、
+  // 傾きに応じた上下左右±15°のオフセットを見た目にだけ上乗せする(camYaw/camPitch自体は書き換えない)
+  const effYaw = camYaw + gyroYawOffset;
+  const effPitch = clamp(camPitch + gyroPitchOffset, 5*D2R, 85*D2R);
+  camera.position.x = tx + effDist*Math.cos(effPitch)*Math.sin(effYaw);
+  camera.position.y = ty + effDist*Math.sin(effPitch);
+  camera.position.z = tz + effDist*Math.cos(effPitch)*Math.cos(effYaw);
   camera.lookAt(tx, ty, tz);
 }
 
