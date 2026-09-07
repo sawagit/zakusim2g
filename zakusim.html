@@ -470,14 +470,21 @@
     display:none; position:fixed; left:0; top:0; width:100%; height:100%; z-index:19;
     background:#ffffff; opacity:0; pointer-events:none;
   }
-  /* 制限時間内にラスボスを倒せなかったときの「コロン落とし」告知。ボス出現時のバナーと同じ作りで、配色だけ警告色にする */
-  #colonyBanner {
-    display:none; position:fixed; top:340px; left:50%; transform:translateX(-50%); z-index:14;
+  /* コロン落としまでの残り時間のカウントダウン。上空から数字が近づいてくるように、
+     小さく上のほうから現れて、大きくなりながら手前へ迫って消える(1秒ごとに数字を出し直す) */
+  #colonyCountdown {
+    display:none; position:fixed; top:50%; left:50%; z-index:14;
     font-family: -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
-    font-size:26px; font-weight:bold; color:#fff2d0; text-align:center; letter-spacing:2px;
-    background:linear-gradient(180deg,#4a1a00,#7a2a00); border:2px solid #ff8a00; border-radius:10px;
-    padding:16px 30px; box-shadow:0 0 24px rgba(255,138,0,0.75); pointer-events:none;
-    max-width:90vw; text-shadow:0 0 10px rgba(255,138,0,0.95); animation:blink 0.6s infinite;
+    font-size:clamp(90px,26vw,260px); font-weight:900; color:rgba(255,45,45,0.55);
+    text-shadow:0 0 30px rgba(255,0,0,0.45); letter-spacing:2px;
+    pointer-events:none; user-select:none; white-space:nowrap;
+    transform:translate(-50%,-50%);
+  }
+  #colonyCountdown.approach { animation:colonyApproach 1s linear; }
+  @keyframes colonyApproach {
+    0%   { transform:translate(-50%,-50%) translateY(-34vh) scale(0.28); opacity:0.05; }
+    55%  { opacity:1; }
+    100% { transform:translate(-50%,-50%) translateY(8vh) scale(1.9); opacity:0; }
   }
   #congratsBanner {
     display:none; position:fixed; left:0; top:0; width:100%; height:100%; z-index:18;
@@ -605,7 +612,7 @@
 <div id="qblockTargetsLayer"></div>
 <div id="offscreenTarget"><span class="ot-label">Target</span><span class="ot-arrow">▶</span></div>
 <div id="bossAppearBanner">「見える。<br>私にも敵が見える」</div>
-<div id="colonyBanner">⚠️ コロン落下!!<br>退避が間に合わない</div>
+<div id="colonyCountdown"></div>
 <div id="colonyWhiteout"></div>
 <div id="congratsBanner">
   <div class="big">CONGRATURATION !!!</div>
@@ -2472,14 +2479,15 @@ function updateBossDefeatFall(dt){
 // 落下角度・突き刺さり方は「コロニー落とし」のジオラマを参考にした
 const COLONY_TIME_LIMIT = 20.0;     // 秒。この時間までにラスボスを撃破できないと落ちてくる(演出の検証用に短くした暫定値。本来は100秒)
 const COLONY_FALL_TIME = 9.6;       // 上空から着弾するまでの時間(秒)。当初3.2秒だったが、じっくり見せるため1/3の速度に落とした
-const COLONY_BLAST_TIME = 2.2;      // 着弾後、ドーム状の爆発が広がりきるまでの時間(秒)
+const COLONY_COUNTDOWN_TIME = 10.0; // 落下の何秒前からカウントダウンを表示するか
+const COLONY_BLAST_TIME = 6.6;      // 着弾後、ドーム状の爆発が広がりきるまでの時間(秒)。当初2.2秒から3倍に伸ばしてゆっくり広がるようにした
 const COLONY_WHITEOUT_HOLD = 0.35;  // 画面が真っ白になったまま保持する時間(秒)
 const COLONY_WHITEOUT_FADE = 1.4;   // 白から「背景だけの画」へ戻していく時間(秒)
 const COLONY_RADIUS = 90.0;         // 円筒の半径(m)
 const COLONY_LENGTH = 420.0;        // 円筒の長さ(m)
 const COLONY_START_Y = 1100.0;      // 落下開始高度(m)
 const COLONY_TILT = 42*D2R;         // 傾き(鉛直から何度倒すか)。斜めに突き刺さる見た目にする
-const COLONY_EMBED_DEPTH = 20.0;    // 先端が地面へ潜り込む深さ(m)。深く突き刺さらず、浅く刺さった状態で止める
+const COLONY_EMBED_DEPTH = 10.0;    // 先端が地面へ潜り込む深さ(m)。深く突き刺さらず、浅く刺さった状態で止める
 const COLONY_BLAST_RADIUS = 1500.0; // 最終的なドーム爆発の半径(m)
 // お菓子のコロンらしい見た目にするため、ビスケットの巻き模様を簡単な斜めストライプのテクスチャで表現する
 function createColonyTexture(){
@@ -2529,9 +2537,31 @@ const colonyBlastMat = new THREE.MeshBasicMaterial({
 const colonyBlastDome = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 16, 0, Math.PI*2, 0, Math.PI/2), colonyBlastMat);
 colonyBlastDome.visible = false;
 scene.add(colonyBlastDome);
-const colonyBannerEl = document.getElementById('colonyBanner');
+const colonyCountdownEl = document.getElementById('colonyCountdown');
 const colonyWhiteoutEl = document.getElementById('colonyWhiteout');
-const colonyDrop = { active:false, phase:'', timer:0, x:0, z:0 };
+const colonyDrop = { active:false, phase:'', timer:0, x:0, z:0, countdownShown:-1 };
+
+// 落下の10秒前から、残り秒数を大きな赤い半透明の数字で表示する。1秒ごとに数字を出し直し、
+// そのたびに小さく上のほうから現れて大きくなりながら手前へ迫る(上空から近づいてくる見立て)
+function updateColonyCountdown(){
+  if (vsMode || colonyDrop.active || gameOver || state === 'victory'){ hideColonyCountdown(); return; }
+  const remain = COLONY_TIME_LIMIT - elapsedTime;
+  if (remain > COLONY_COUNTDOWN_TIME || remain <= 0){ hideColonyCountdown(); return; }
+  const n = Math.ceil(remain);
+  if (n === colonyDrop.countdownShown) return;
+  colonyDrop.countdownShown = n;
+  colonyCountdownEl.textContent = String(n);
+  colonyCountdownEl.style.display = 'block';
+  colonyCountdownEl.classList.remove('approach');
+  void colonyCountdownEl.offsetWidth; // アニメーションを頭から再生し直すための強制リフロー
+  colonyCountdownEl.classList.add('approach');
+}
+function hideColonyCountdown(){
+  if (colonyDrop.countdownShown === -1) return;
+  colonyDrop.countdownShown = -1;
+  colonyCountdownEl.classList.remove('approach');
+  colonyCountdownEl.style.display = 'none';
+}
 
 // ホワイトアウト後は「ステージが消し飛んで背景(空)だけが残った」画にする。空・雲・ライト以外を一時的に隠し、
 // 何を隠したかを覚えておいて、難易度選択画面へ戻る際に元の表示状態へ戻す(個別の表示ロジックを壊さないため)
@@ -2558,7 +2588,7 @@ function resetColonyDrop(){
   colonyGroup.visible = false;
   colonyShadowMesh.visible = false;
   colonyBlastDome.visible = false;
-  colonyBannerEl.style.display = 'none';
+  hideColonyCountdown();
   colonyWhiteoutEl.style.display = 'none';
   colonyWhiteoutEl.style.opacity = '0';
 }
@@ -2567,28 +2597,25 @@ function startColonyDrop(){
   colonyDrop.active = true;
   colonyDrop.phase = 'falling';
   colonyDrop.timer = 0;
-  // 落下地点はその瞬間のプレイヤーの真上(「退避が間に合わない」の通り、逃げ場はない)。
-  // 迫ってくる様子が画面に映るよう、離れた中央ではなく自機の頭上に落とす。盤外・スリットの上には落とさない
-  let dx = clamp(pos.x, -curGroundHalf*0.85, curGroundHalf*0.85);
-  let dz = clamp(pos.z, -curGroundHalf*0.85, curGroundHalf*0.85);
-  ({ x:dx, z:dz } = pushOutOfSlitGap(dx, dz));
-  colonyDrop.x = dx; colonyDrop.z = dz;
-  colonyGroup.rotation.set(0, Math.random()*Math.PI*2, COLONY_TILT);
+  hideColonyCountdown();
+  // 落下地点は常にステージ中央(原点)
+  colonyDrop.x = 0; colonyDrop.z = 0;
+  colonyGroup.rotation.set(0, Math.random()*Math.PI*2, COLONY_TILT); // 向きは毎回ランダムだが、落下中は回転させない
   colonyGroup.visible = true;
   colonyShadowMesh.position.set(colonyDrop.x, 0.05, colonyDrop.z);
   colonyShadowMesh.visible = true;
-  colonyBannerEl.style.display = 'block';
-  speakWarning(); // 「コッチヲミロー!」の読み上げを流用した警告(音ありの場合のみ鳴る)
 }
 // 落下中〜爆発中は通常の追従カメラを止め、落下地点を斜め横から捉える演出用のカメラワークに切り替える
 // (真上から落ちてくるため、通常の背面視点のままではコロンが画面に映らない)
 function updateColonyCamera(){
+  // カメラはプレイヤーの立っている位置に据え置き、ステージ中央へ落ちてくるコロンを見上げる画にする。
+  // 巨大な物体のため画面から見切れるが、「自分のいる場所から見上げている」感じを優先する。
+  // 着弾後は、目の前の筒で埋まって爆発が見えなくなってしまうため、注視点を着弾点付近へ下ろす
   const cp = colonyGroup.position;
-  // 全長420m・直径180mの巨大な物体のため、十分に離れた位置から見上げないと画面に収まらない
-  const ux = Math.sin(camYaw), uz = Math.cos(camYaw); // 直前まで見ていた向きを基準に、落下地点の手前へ回り込む
-  camera.position.set(colonyDrop.x + ux*900, 260, colonyDrop.z + uz*900);
-  const aimY = colonyDrop.phase === 'falling' ? Math.min(cp.y*0.45, 260) : 120; // 落下中は高いところ、着弾後は地表付近を見る
-  camera.lookAt(colonyDrop.x, aimY, colonyDrop.z);
+  const ux = Math.sin(camYaw), uz = Math.cos(camYaw); // 直前まで見ていた向きを基準に、自機のすぐ後ろへ回る
+  camera.position.set(pos.x + ux*45, airY + 30, pos.z + uz*45);
+  if (colonyDrop.phase === 'falling') camera.lookAt(cp.x, cp.y, cp.z);
+  else camera.lookAt(colonyDrop.x, 80, colonyDrop.z);
 }
 function updateColonyDrop(dt){
   if (!colonyDrop.active) return;
@@ -2599,8 +2626,7 @@ function updateColonyDrop(dt){
     // 傾けた円筒の中心。着弾時は先端がCOLONY_EMBED_DEPTHぶんだけ地面へ潜り込んだ位置で止める(浅く突き刺さる)
     const endY = Math.cos(COLONY_TILT)*COLONY_LENGTH/2 - COLONY_EMBED_DEPTH;
     const y = COLONY_START_Y + (endY - COLONY_START_Y)*eased;
-    colonyGroup.position.set(colonyDrop.x, y, colonyDrop.z);
-    colonyGroup.rotation.y += dt*0.35; // ゆっくり回りながら落ちてくる
+    colonyGroup.position.set(colonyDrop.x, y, colonyDrop.z); // 姿勢は落下開始時のまま(回転はさせない)
     // 落下地点の影。高いうちは薄く大きく、近づくほど濃く小さくなる(真上から迫っていることを地面側でも伝える)
     const shadowScale = COLONY_RADIUS*(2.6 - 1.4*eased);
     colonyShadowMesh.scale.set(shadowScale, shadowScale, 1);
@@ -2609,10 +2635,14 @@ function updateColonyDrop(dt){
       colonyDrop.phase = 'blast';
       colonyDrop.timer = 0;
       colonyShadowMesh.visible = false;
-      colonyBannerEl.style.display = 'none';
       colonyBlastDome.position.set(colonyDrop.x, 0, colonyDrop.z);
       colonyBlastDome.visible = true;
-      playExplosionSound();
+      // 着弾の瞬間に音をすべて止める(BGM・バーニア音・読み上げ)。以降は爆発音も含めて一切鳴らさず、
+      // 無音のまま爆発が広がっていく。soundEnabledは次にゲームを始める際にstartGame()が読み直す
+      stopBGM();
+      stopThrusterSound();
+      if ('speechSynthesis' in window){ try{ window.speechSynthesis.cancel(); }catch(e){} }
+      soundEnabled = false;
       // 着弾地点まわりに爆発と土煙をまとめて発生させる
       for (let i=0;i<14;i++){
         const a = Math.random()*Math.PI*2, r = Math.random()*COLONY_RADIUS*2.2;
@@ -2621,7 +2651,6 @@ function updateColonyDrop(dt){
       // プレイヤーもここで爆散させる(ドクロの直撃でGAME OVERになる場合と同じ見せ方に揃える)
       characterRoot.visible = false;
       spawnPlayerShatter(pos.x, airY + cur.hipY + TORSO_H*0.5, pos.z);
-      stopThrusterSound();
     }
   } else if (colonyDrop.phase === 'blast'){
     // 突き刺さったコロンはそのまま残し、ドーム状の爆発だけが画面全体へ広がっていく
@@ -7638,6 +7667,7 @@ function loop(now){
     updateBossLaser(dt); // ボスの口からの真下レーザー攻撃
     updateBossDefeatFall(dt); // ラスボス撃破後、煙を出しながら落下→爆発する演出(state==='victory'の間も進める必要がある)
     // 制限時間内にラスボスを撃破できなかった場合の「コロン落とし」(全ステージ共通。VS Modeは対象外)
+    updateColonyCountdown(); // 落下の10秒前からのカウントダウン表示
     if (!vsMode && !colonyDrop.active && state !== 'victory' && !bossDefeatFalling && elapsedTime >= COLONY_TIME_LIMIT) startColonyDrop();
     updateRadar();
     updateCpu(dt); // VS Mode専用(vsMode===falseなら内部で即return)
