@@ -870,6 +870,8 @@ const HEAD_TRACK_T=0.3;
 const CHAR_HEIGHT = LEG_LEN + TORSO_H + HEAD_R*2; // ロボットの全高(17.0m)。ジャンプ中の到達判定に使う
 const QBLOCK_SIZE=20.0;
 const QBLOCK_BOTTOM_Y=20.0;      // 底辺の浮遊高さ(ジャンプで届く高さまで下げた値)
+// 水平方向の取得判定半径(プレイストレス軽減のため、ブロック本体の正方形判定より大幅に広く取る。VS Modeは対CPUの公平性のため対象外、従来通りの正方形判定のまま)
+const QBLOCK_PICKUP_RADIUS=50.0;
 const QBLOCK_COLOR=0x9a9a9a;     // グレー(物資ブロック)
 const QBLOCK_DENSITY_RADIUS=200.0; // ブロック同士の密度の目安(半径200mに1個)
 const QBLOCK_AREA_HALF=500.0;    // ？ブロックを配置するエリア(原点から±500m四方。地面サイズ±550mに収まる範囲)
@@ -2549,7 +2551,9 @@ function spawnPlayerShatter(x,y,z){
     );
     const angVel = new THREE.Vector3((Math.random()-0.5)*10, (Math.random()-0.5)*10, (Math.random()-0.5)*10);
     scene.add(mesh);
-    particles.push({ mesh, vel, age:0, life:1.1, baseScale:1, grow:false, angVel });
+    // このMesh固有のジオメトリ・Materialなので、使い回しプールへは戻さずここで individually 破棄する
+    particles.push({ mesh, vel, age:0, life:1.1, baseScale:1, grow:false, angVel,
+      onRemove: (m) => { scene.remove(m); m.geometry.dispose(); m.material.dispose(); } });
   }
 }
 // ドクロの飛行軌跡に沿って表示する炎(小さく短命なパーティクル)
@@ -2672,7 +2676,9 @@ function updateParticles(dt){
     const p = particles[i];
     p.age += dt;
     if (p.age >= p.life){
-      releaseParticleMesh(p.mesh);
+      // 使い回しプールの対象(共有ジオメトリ+専用Material)はreleaseParticleMeshでプールへ戻す。
+      // 固有ジオメトリ・共有素材を使う特殊な破片(プレイヤー爆散・物資ブロック破片)はonRemoveで個別の後始末をする
+      if (p.onRemove) p.onRemove(p.mesh); else releaseParticleMesh(p.mesh);
       particles.splice(i,1);
       continue;
     }
@@ -5959,6 +5965,110 @@ function updateForm2(dt){
   }
 }
 
+// ---- 物資ブロック取得演出の仕上げ:光の玉がプレイヤーに到達した瞬間、一瞬だけ白くフラッシュする ----
+const PLAYER_PICKUP_FLASH_TIME = 0.15;
+let playerPickupFlashTimer = -1;
+function triggerPlayerPickupFlash(){
+  playerPickupFlashTimer = 0;
+}
+function updatePlayerPickupFlash(dt){
+  if (playerPickupFlashTimer < 0) return;
+  playerPickupFlashTimer += dt;
+  if (hiddenAuraTimer < 0) bodyMat.emissive.setHex(0xffffff); // 裏技のオーラ点滅中はそちらを優先し、上書きしない
+  if (playerPickupFlashTimer >= PLAYER_PICKUP_FLASH_TIME){
+    playerPickupFlashTimer = -1;
+    if (hiddenAuraTimer < 0) bodyMat.emissive.setHex(0x000000);
+  }
+}
+
+// ---- 物資ブロック取得演出:取得判定の範囲を大幅に広げたことで生じる見た目の違和感を補うため、
+// 取得の瞬間にブロックが6枚のパネルに分解して落下し、同時に中心から光の玉6個が一度外側へ広がってから
+// プレイヤーへ収束し、到達した瞬間プレイヤーが一瞬フラッシュする。演出全体で約1.5秒(VS Modeでは行わない) ----
+const qblockShatterGeo = new THREE.BoxGeometry(QBLOCK_SIZE, QBLOCK_SIZE, 2.0);
+const QBLOCK_SHATTER_FACES = [ // BoxGeometryの6面ぶんの向き(法線方向と、パネルをその面に合わせる回転)
+  { dir:[1,0,0],  rot:[0, Math.PI/2, 0] },
+  { dir:[-1,0,0], rot:[0,-Math.PI/2, 0] },
+  { dir:[0,1,0],  rot:[-Math.PI/2, 0, 0] },
+  { dir:[0,-1,0], rot:[Math.PI/2, 0, 0] },
+  { dir:[0,0,1],  rot:[0, 0, 0] },
+  { dir:[0,0,-1], rot:[0, Math.PI, 0] }
+];
+// 分解した6枚のパネルは、取得したブロック自身が使っていたMaterial(通常/スペシャル、ザ・世界中の反転状態も含む)を
+// そのまま共有して見た目を合わせる。ジオメトリ・Materialとも他のブロックと共用のままなので、寿命が切れても
+// disposeせず、シーンから外すだけにする(通常のパーティクル使い回しプールの対象にはしない)
+function spawnQBlockShatter(x, y, z, material){
+  const half = QBLOCK_SIZE/2;
+  for (const f of QBLOCK_SHATTER_FACES){
+    const mesh = new THREE.Mesh(qblockShatterGeo, material);
+    mesh.position.set(x+f.dir[0]*half, y+f.dir[1]*half, z+f.dir[2]*half);
+    mesh.rotation.set(f.rot[0], f.rot[1], f.rot[2]);
+    scene.add(mesh);
+    const popSpd = 4 + Math.random()*3;
+    const vel = new THREE.Vector3(
+      f.dir[0]*popSpd + (Math.random()-0.5)*3,
+      f.dir[1]*popSpd + (Math.random()-0.5)*3 + 2,
+      f.dir[2]*popSpd + (Math.random()-0.5)*3
+    );
+    const angVel = new THREE.Vector3((Math.random()-0.5)*6, (Math.random()-0.5)*6, (Math.random()-0.5)*6);
+    particles.push({ mesh, vel, age:0, life:1.2, baseScale:1, grow:false, angVel, onRemove: (m) => { scene.remove(m); } });
+  }
+}
+const QBLOCK_PICKUP_FX_DURATION = 1.5;   // 演出全体の時間(秒)
+const QBLOCK_PICKUP_FX_ORB_COUNT = 6;
+const QBLOCK_PICKUP_FX_BURST_TIME = 0.5; // このタイミングまでに外側へ広がりきり、以降はプレイヤーへ収束する
+const QBLOCK_PICKUP_FX_BURST_RADIUS = 12.0;
+const QBLOCK_PICKUP_FX_ORB_COLOR = 0xfff2b0;
+const qblockPickupFxOrbGeo = new THREE.SphereGeometry(1.2, 12, 8);
+const qblockPickupFx = []; // 進行中の演出のリスト(複数のブロックをほぼ同時に取得した場合も個別に管理する)
+function spawnQBlockPickupFx(x, y, z){
+  const c = theWorldActive ? invertHex(QBLOCK_PICKUP_FX_ORB_COLOR) : QBLOCK_PICKUP_FX_ORB_COLOR;
+  const orbs = [];
+  for (let i=0;i<QBLOCK_PICKUP_FX_ORB_COUNT;i++){
+    const mesh = new THREE.Mesh(qblockPickupFxOrbGeo, new THREE.MeshBasicMaterial({ color:c, transparent:true, opacity:0.95, depthWrite:false }));
+    mesh.position.set(x, y, z);
+    scene.add(mesh);
+    const theta = Math.random()*Math.PI*2;
+    const phi = Math.acos(Math.random()*2-1);
+    const dir = { x:Math.sin(phi)*Math.cos(theta), y:Math.cos(phi), z:Math.sin(phi)*Math.sin(theta) };
+    orbs.push({ mesh, dir, startX:x, startY:y, startZ:z });
+  }
+  qblockPickupFx.push({ orbs, age:0, flashed:false });
+}
+function updateQBlockPickupFx(dt){
+  for (let fi=qblockPickupFx.length-1; fi>=0; fi--){
+    const fx = qblockPickupFx[fi];
+    fx.age += dt;
+    if (fx.age >= QBLOCK_PICKUP_FX_DURATION){
+      fx.orbs.forEach(o => { scene.remove(o.mesh); o.mesh.material.dispose(); });
+      qblockPickupFx.splice(fi,1);
+      continue;
+    }
+    const targetX = pos.x, targetY = airY+cur.hipY+TORSO_H*0.5, targetZ = pos.z; // プレイヤーの胸のあたりへ収束させる
+    for (const o of fx.orbs){
+      if (fx.age <= QBLOCK_PICKUP_FX_BURST_TIME){
+        const f = fx.age / QBLOCK_PICKUP_FX_BURST_TIME;
+        const ease = 1 - (1-f)*(1-f); // ease-out
+        o.mesh.position.set(
+          o.startX + o.dir.x*QBLOCK_PICKUP_FX_BURST_RADIUS*ease,
+          o.startY + o.dir.y*QBLOCK_PICKUP_FX_BURST_RADIUS*ease,
+          o.startZ + o.dir.z*QBLOCK_PICKUP_FX_BURST_RADIUS*ease
+        );
+      } else {
+        const f = clamp((fx.age-QBLOCK_PICKUP_FX_BURST_TIME) / (QBLOCK_PICKUP_FX_DURATION-QBLOCK_PICKUP_FX_BURST_TIME), 0, 1);
+        const ease = f*f*(3-2*f); // smoothstep(収束はなめらかに加減速させる)
+        const bx = o.startX + o.dir.x*QBLOCK_PICKUP_FX_BURST_RADIUS;
+        const by = o.startY + o.dir.y*QBLOCK_PICKUP_FX_BURST_RADIUS;
+        const bz = o.startZ + o.dir.z*QBLOCK_PICKUP_FX_BURST_RADIUS;
+        o.mesh.position.set(bx+(targetX-bx)*ease, by+(targetY-by)*ease, bz+(targetZ-bz)*ease);
+      }
+    }
+    if (!fx.flashed && fx.age >= QBLOCK_PICKUP_FX_DURATION - PLAYER_PICKUP_FLASH_TIME){
+      fx.flashed = true;
+      triggerPlayerPickupFlash();
+    }
+  }
+}
+
 // ============================================================
 // ？ブロック・ザ・ワールド
 // ============================================================
@@ -5966,17 +6076,29 @@ function updateQBlock(dt){
   if (!inAir) return; // ジャンプ中(空中)のみ、つつき判定を行う(ジョジョ立ち・ザ・ワールドを空中発動していても判定する)
   const sizeMult = hiddenAuraTimer >= 0 ? HIDDEN_AURA_BODY_SCALE : 1; // 裏技のオーラで巨大化中は、実際の見た目の大きさに合わせて当たり判定も拡大する
   const headY = airY + CHAR_HEIGHT*sizeMult; // ロボットの頭頂の高さ(足元はairY)
-  const half = QBLOCK_SIZE/2*sizeMult;
+  const squareHalf = QBLOCK_SIZE/2*sizeMult; // VS Modeは対CPUとの公平性のため、従来通りの正方形判定のまま
+  const pickupRadius = QBLOCK_PICKUP_RADIUS*sizeMult; // 通常プレイはプレイストレス軽減のため大幅に広い円形判定
   for (const b of qblocks){
     if (!b.alive) continue;
     const blockTop = b.bottomY + QBLOCK_SIZE;
     // プレイヤーの体(足元airY〜頭頂headY)とブロックの範囲(底面bottomY〜天面blockTop)が
     // 上下方向で少しでも重なっていれば判定する。頭頂の高さだけで判定すると、頭上ブロックに
     // 下から頭をぶつける動きしか検出できず、上からブロックに乗る/触れる動きが判定されないため
+    // (ジャンプが必須という条件自体は変えていないので、上下方向の判定はこれまでと同じまま)
     if (airY > blockTop || headY < b.bottomY) continue;
-    if (Math.abs(pos.x-b.x) > half || Math.abs(pos.z-b.z) > half) continue;
+    const dx = pos.x-b.x, dz = pos.z-b.z;
+    if (vsMode){
+      if (Math.abs(dx) > squareHalf || Math.abs(dz) > squareHalf) continue;
+    } else if (dx*dx + dz*dz > pickupRadius*pickupRadius){
+      continue;
+    }
     // つついたブロックは消滅し、その場でフォーム2に変身する(発動条件を交換済み)
     b.alive = false;
+    if (!vsMode){
+      // 判定範囲を大幅に広げた分、遠目から取れてしまう見た目の違和感を演出で補う(VS Modeは対象外)
+      spawnQBlockShatter(b.x, b.bottomY+QBLOCK_SIZE/2, b.z, b.mesh.material);
+      spawnQBlockPickupFx(b.x, b.bottomY+QBLOCK_SIZE/2, b.z);
+    }
     b.mesh.visible = false;
     b.shadow.visible = false;
     triggerForm2();
@@ -7055,6 +7177,8 @@ function loop(now){
     updateHaro(dt);
     updateForm2(dt);
     updateQBlock(dt);
+    updateQBlockPickupFx(dt); // 物資ブロック取得演出(6枚のパネル分解+光の玉の収束)
+    updatePlayerPickupFlash(dt); // 上記演出の締めのフラッシュ
     updateSpecialBuff(dt); // スペシャルブロック取得後20秒間の自動迎撃レーザー
     updateTheWorld(dt);
     updateBoss(dt);
