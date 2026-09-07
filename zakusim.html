@@ -3704,6 +3704,10 @@ function startDemo(){
   demoStarting = true; // startGame()内のstartBGM()を抑止するための目印(この時点ではまだdemoActiveを立てられない)
   startGame(demoDiffNext, false);
   demoStarting = false;
+  // デモは完全に無音で流す(タイトル画面を放置しただけの端末が、置いたまま勝手に音を出さないようにするため)。
+  // 効果音・BGM・警告の読み上げはすべてsoundEnabledを見ているため、ここで落とすだけで全経路が止まる。
+  // 次に通常のプレイを始めるときは、startGame()が改めてチェックボックスの設定を読み直す
+  soundEnabled = false;
   // 第三部解禁後は第一部→第二部→第三部の順で3種類を巡回する(解禁前は従来通り第一部・第二部の交互)
   demoDiffNext = part3Unlocked ? (demoDiffNext % 3) + 1 : (demoDiffNext === 1 ? 2 : 1);
   demoActive = true;
