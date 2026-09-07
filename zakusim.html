@@ -6158,17 +6158,17 @@ function updateQBlock(dt){
 // 時間制限は無く、取得後はずっと有効。ただしダメージを受けるたびに銀玉が1個ずつ失われ、0個になった時点で効果終了する
 const SPECIAL_BUFF_ORB_COUNT = 3;
 const SPECIAL_BUFF_LASER_INTERVAL = 1.0;
-const SPECIAL_BUFF_RANGE = 80.0;        // この水平距離以内の敵ザク・ドクロだけを対象にする(当初40mから倍に拡大)
+const SPECIAL_BUFF_RANGE = 60.0;        // この水平距離以内の敵ザク・ドクロだけを対象にする(当初40m→80mに拡大した後、60mに調整)
 const SPECIAL_BUFF_ORB_RADIUS = 0.8;    // 直径を当初の半分にした値
 const SPECIAL_BUFF_ORBIT_RADIUS = 27.0; // 機体中心からの回転半径(当初4.5m→13.5m→さらに倍の27mに拡大)
-const SPECIAL_BUFF_ORBIT_HEIGHT = CHAR_HEIGHT + 2.0; // 頭上(全高17mより2m上)を旋回するようにする
+const SPECIAL_BUFF_ORBIT_HEIGHT = CHAR_HEIGHT + 12.0; // 頭上(全高17mより2m上だったのを、さらに10m上げて12m上)を旋回するようにする
 const SPECIAL_BUFF_ORBIT_SPEED = 1.25;  // rad/s(当初2.5から半分に)
 const SPECIAL_BUFF_WOBBLE_R_AMP = 3.0;  // 回転半径のゆらぎの振幅(m)
 const SPECIAL_BUFF_WOBBLE_R_FREQ = 1.3; // 回転角速度に対する半径ゆらぎの周波数比
-const SPECIAL_BUFF_WOBBLE_Y_AMP = 2.0;  // 上下のゆらぎの振幅(m)
+const SPECIAL_BUFF_WOBBLE_Y_AMP = 4.0;  // 上下のゆらぎの振幅(m)。サイン波の高低差を強調するため当初の倍にした
 const SPECIAL_BUFF_WOBBLE_Y_FREQ = 0.9; // 回転角速度に対する上下ゆらぎの周波数比
 const SPECIAL_BUFF_LASER_COLOR = 0x33ff55; // レーザーは発光グリーン(銀玉自体の色とは別)
-const specialBuffOrbMat = new THREE.MeshStandardMaterial({ color:0xc8ccd4, metalness:0.9, roughness:0.15, emissive:0x8fa0b8, emissiveIntensity:0.9 }); // 発光銀色
+const specialBuffOrbMat = new THREE.MeshStandardMaterial({ color:0x8c8f94, metalness:0.9, roughness:0.15, emissive:0x647081, emissiveIntensity:0.9 }); // 発光銀色(黒寄りにするため明度を30%落とした)
 // この機能の状態一式を1つのオブジェクトにまとめておく(グローバル変数を機能ごとにばらばらに増やさないための保守性対策)
 const specialBuff = {
   orbs: [],
