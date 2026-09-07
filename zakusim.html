@@ -2318,7 +2318,7 @@ scene.add(bossShadowMesh);
 let bossActive = false;
 let bossAngle = 0;
 let bossX = 0, bossZ = 0;
-let bossPhase = 1;      // 1: 通常 | 2: 1回目のタッチ後(サイズ半分・速度倍)
+let bossPhase = 1;      // 1: 通常 | 2: 1回目のヒット後(速度倍・浮遊位置が18m上) | 3: 第三部のみ、2回目のヒット後(さらに18m上・口レーザーの頻度倍)
 let bossSizeMult = 1.0;
 let bossSpeedMult = 1.0;
 let bossFlashTimer = -1;
@@ -6610,8 +6610,11 @@ function updateQBlock(dt){
     if (qblocksCollected === 1) triggerDigestCapture('first_block'); // ハイライトダイジェスト用
     if (qblocksCollected === qblockLastWarningCount(difficulty)){
       awardTrophy('qblock_9'); // 難易度ごとに定めた「あと一つ」のタイミングで表示する(テキストはqblock_9(あと一つ！！)を流用)
-    } else if (qblocksCollected <= 9 && qblocksCollected < qblockTotalCount){
-      awardTrophy('qblock_'+qblocksCollected); // 1〜9個目はそれぞれ専用のカウントトロフィー(全数取得時は下記の分岐が扱う)
+    } else if (qblocksCollected <= 8 && qblocksCollected < qblockTotalCount){
+      // 1〜8個目はそれぞれ専用のカウントトロフィー(全数取得時は下記の分岐が扱う)。
+      // qblock_9(あと一つ！！)は上の「あと一つ」判定の専用テキストのため、ここでは使わない
+      // (第三部は全11個のため、9個目=残り2個の時点で「あと一つ！！」が出てしまう不具合を防ぐ)
+      awardTrophy('qblock_'+qblocksCollected);
     }
     if (qblocksCollected === qblockBossThreshold(difficulty)){
       spawnBoss(); // 物資ブロックを全数取得した瞬間に出現する(難易度共通)
@@ -6823,8 +6826,9 @@ function updateTheWorld(dt){
 }
 
 function currentHaroCycle(){
-  // ラスボスがフェーズ2(1回目のタッチ後)の間は出現周期が短くなる
-  return (bossActive && bossPhase === 2) ? HARO_CYCLE_BOSS : HARO_CYCLE;
+  // ラスボスがフェーズ2(1回目のヒット後)以降の間は出現周期が短くなる。
+  // 第三部の第3形態(2回目のヒット後)でも、フェーズ2と同じ扱いのまま短い周期を維持する
+  return (bossActive && bossPhase >= 2) ? HARO_CYCLE_BOSS : HARO_CYCLE;
 }
 function currentHaroSpawnArc(){
   // 背面カメラ設定(視界自動回転オン)でないときは出現角度を広げる
