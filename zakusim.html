@@ -339,8 +339,10 @@
   #stick8.active #stickKnob { background:rgba(140,140,140,0.8); }
   #actionButtons {
     position:fixed; right:22px; bottom:calc(26px + env(safe-area-inset-bottom));
-    z-index:15; flex-direction:column; align-items:flex-end; gap:14px;
+    z-index:15; flex-direction:row; align-items:flex-start; gap:14px;
   }
+  /* ジョジョ・ザ・世界は縦に並べた列のまま、JUMPだけをその左側(ジョジョとほぼ同じ高さ)に離して配置する */
+  #poseButtons { display:flex; flex-direction:column; align-items:flex-end; gap:14px; }
   .actbtn {
     width:64px; height:64px; border-radius:50%;
     background:rgba(255,255,255,0.35); border:2px solid rgba(150,150,150,0.85);
@@ -356,6 +358,8 @@
     animation:tetsuReadyBlink 2.2s ease-in-out infinite;
   }
   @keyframes tetsuReadyBlink { 0%,100%{opacity:1;} 50%{opacity:0.45;} }
+  #btnJojo { visibility:hidden; } /* 配置は保ったまま、物資ブロックを1個取得するまで見た目だけ隠す(JS側でjojoUnlockedに連動して切り替える) */
+  #btnJojo.ready { visibility:visible; }
 
   #theWorldBanner {
     display:none; position:fixed; top:60px; left:50%; transform:translateX(-50%); z-index:12;
@@ -491,6 +495,7 @@
     #stick8 { left:calc(38px + env(safe-area-inset-left)); bottom:calc(10px + env(safe-area-inset-bottom)); width:130px; height:130px; }
     #stickKnob { width:52px; height:52px; }
     #actionButtons { right:calc(38px + env(safe-area-inset-right)); bottom:calc(10px + env(safe-area-inset-bottom)); gap:8px; }
+    #poseButtons { gap:8px; }
     .actbtn { width:48px; height:48px; font-size:10px; }
     #btnJump { width:56px; height:56px; font-size:12px; }
 
@@ -680,8 +685,10 @@
 <div id="stick8"><div id="stickKnob"></div></div>
 <div id="actionButtons">
   <div class="actbtn" id="btnJump">JUMP</div>
-  <div class="actbtn" id="btnJojo">ジョジョ</div>
-  <div class="actbtn" id="btnTetsu">ザ・世界</div>
+  <div id="poseButtons">
+    <div class="actbtn" id="btnJojo">ジョジョ</div>
+    <div class="actbtn" id="btnTetsu">ザ・世界</div>
+  </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js" integrity="sha384-CI3ELBVUz9XQO+97x6nwMDPosPR5XvsxW2ua7N1Xeygeh1IxtgqtCkGfQY9WWdHu" crossorigin="anonymous"></script>
@@ -2966,6 +2973,11 @@ let theWorldActive = false;  // ザ・ワールド発動中(5秒間)か
 function updateTetsuButtonState(){
   btnTetsuEl.classList.toggle('ready', theWorldCharged);
 }
+// 序盤の慣らし演出:物資ブロックを1個取得するまでジョジョ立ちは使用不可・ボタンも非表示にする(VS Modeは対象外、常時使用可能)
+let jojoUnlocked = false;
+function updateJojoButtonState(){
+  btnJojoEl.classList.toggle('ready', jojoUnlocked);
+}
 let theWorldTimer = 0;
 // 発動の瞬間にドクロの頻度・速度を半減させ、以後は時間経過(currentRateStepと同じ周期)でまた通常水準まで回復していく
 let worldRateMult = 1.0;
@@ -3192,6 +3204,7 @@ const goBestEl = document.getElementById('goBest');
 const goNameEntryEl = document.getElementById('goNameEntry');
 const goNameInputEl = document.getElementById('goNameInput');
 const btnTetsuEl = document.getElementById('btnTetsu'); // スマホ等のザ・世界ボタン(使用可能になるまで非表示、可能になったら点滅させる)
+const btnJojoEl = document.getElementById('btnJojo'); // スマホ等のジョジョボタン(物資ブロックを1個取得するまで非表示)
 const IS_TOUCH_DEVICE = window.matchMedia('(pointer:coarse)').matches; // スマホ等タッチ操作が主のデバイスかどうか(ボタン点滅で足りるため、使用可能トーストを省略する判定に使う)
 const rankingOverlayEl = document.getElementById('rankingOverlay');
 const settingsOverlayEl = document.getElementById('settingsOverlay');
@@ -3883,6 +3896,7 @@ function updateZakuWalkAnim(z, dt){
 }
 function updateZakus(dt){
   if (difficulty === 1) return; // 第一部限定で無し(第二部・第三部は出現する)
+  if (qblocksCollected < 2) return; // 序盤の慣らし演出:物資ブロックを2個取得するまで敵ザクは出現しない
   if (theWorldActive || state === 'victory') return; // ザ・世界中・ラスボス撃破演出中は出現・移動・タックル判定とも停止する(他の敵と同様)
 
   const spawnInterval = ((difficulty === 3) ? ZAKU_SPAWN_INTERVAL * 0.5 : ZAKU_SPAWN_INTERVAL) / zakuSpawnFreqMult;
@@ -4091,14 +4105,15 @@ function startGame(diff, invincible, vs){
   elapsedTime = 0;
   distanceTraveled = 0;
   if (vsMode){
+    jojoUnlocked = true; // VS Modeはジョジョ立ちが対戦の核となる要素のため、序盤の解禁演出の対象外で常時使用可能にする
+    updateJojoButtonState();
     startVsMatch(); // ドクロは湧かせず、代わりにCPU・VS用HUDを初期化する(詳細は「VS Mode」節を参照)
     // 自機・CPUの開始位置を決めるstartVsMatch()の「後」に呼ぶ必要がある(先に呼ぶと、導入メッセージで停止している間
     // 自機がまだ中央(resetGame直後の初期位置)にいるように見えてしまうバグがあった)
     startVsIntro(); // VS Mode専用の短い導入メッセージ(5秒)を表示し、その間ゲームを停止させる
-  } else {
-    skulls[0].activated = true;
-    scheduleNextSkull(skulls[0]);
   }
+  // ドクロは物資ブロックを1個取得するまで出現しない(updateEnemy側でqblocksCollectedを見て判定するため、
+  // ここでの明示的な有効化は不要になった。以前はここでskulls[0]を能動的に有効化していた)
   document.body.classList.toggle('vs-mode', vsMode); // PC操作説明を右下に移動する等、VS Mode専用のCSSレイアウトに切り替える
   startBGM();
 }
@@ -4188,6 +4203,8 @@ function resetGame(){
 
   theWorldCharged = false;
   updateTetsuButtonState();
+  jojoUnlocked = false; // VS Modeの場合はstartGame()側で改めてtrueにする(常時使用可能なため)
+  updateJojoButtonState();
   theWorldActive = false;
   theWorldTimer = 0;
   worldRateMult = 1.0;
@@ -4292,6 +4309,7 @@ function performMultiJump(){
 }
 
 function pressJojo(){
+  if (!jojoUnlocked) return; // 物資ブロックを1個取得するまでジョジョ立ちは使用できない(VS ModeはstartGame()で常時trueにしてあるため対象外)
   if (vsMatchFrozen()) return;
   // VS Mode専用: ジョジョ立ちの連打(=再発動での連続ヒット)を防ぐため、発動から1秒間は再発動できない。
   // ジョジョ立ち以外の操作(移動・ジャンプ・鉄山靠)には一切影響しない
@@ -5705,6 +5723,7 @@ function updateSkullSlot(s, dt){
 
 function updateEnemy(dt){
   if (vsMode) return; // VS Modeはドクロを出現させない仕様のため(startGame側でskulls[0]を能動的に有効化しないだけでは、このループが自動的に有効化してしまうため明示的にガードする)
+  if (qblocksCollected < 1) return; // 序盤の慣らし演出:物資ブロックを1個取得するまでドクロは出現しない
   if (theWorldActive || state === 'victory') return; // ザ・ワールド中・ラスボス撃破演出中はドクロも静止(移動・出現・命中判定とも停止)
   let activeCount = 1;
   if (elapsedTime >= SKULL_TRIPLE_UNLOCK_TIME) activeCount = 3;
@@ -6114,6 +6133,7 @@ function updateQBlock(dt){
       continue;
     }
     qblocksCollected++;
+    if (qblocksCollected === 1 && !jojoUnlocked){ jojoUnlocked = true; updateJojoButtonState(); } // 1個目の取得でジョジョ立ちを解禁する(ドクロもこのタイミングでupdateEnemy側から出現し始める)
     if (qblocksCollected === SPECIAL_QBLOCK_REVEAL_COUNT) revealSpecialQBlock(); // 第二部・第三部限定(内部でdifficultyを判定)
     // 6個目以降の取得毎に敵ザクの出現頻度を倍にする(第一部はそもそも敵ザクが出現しないため実質無関係)。
     // 終盤(スペシャルブロックの銀玉で凌ぐことを想定した)難易度上昇
@@ -6138,11 +6158,11 @@ function updateQBlock(dt){
 // 時間制限は無く、取得後はずっと有効。ただしダメージを受けるたびに銀玉が1個ずつ失われ、0個になった時点で効果終了する
 const SPECIAL_BUFF_ORB_COUNT = 3;
 const SPECIAL_BUFF_LASER_INTERVAL = 1.0;
-const SPECIAL_BUFF_RANGE = 40.0;        // この水平距離以内の敵ザク・ドクロだけを対象にする
+const SPECIAL_BUFF_RANGE = 80.0;        // この水平距離以内の敵ザク・ドクロだけを対象にする(当初40mから倍に拡大)
 const SPECIAL_BUFF_ORB_RADIUS = 0.8;    // 直径を当初の半分にした値
 const SPECIAL_BUFF_ORBIT_RADIUS = 27.0; // 機体中心からの回転半径(当初4.5m→13.5m→さらに倍の27mに拡大)
 const SPECIAL_BUFF_ORBIT_HEIGHT = CHAR_HEIGHT + 2.0; // 頭上(全高17mより2m上)を旋回するようにする
-const SPECIAL_BUFF_ORBIT_SPEED = 2.5;   // rad/s
+const SPECIAL_BUFF_ORBIT_SPEED = 1.25;  // rad/s(当初2.5から半分に)
 const SPECIAL_BUFF_WOBBLE_R_AMP = 3.0;  // 回転半径のゆらぎの振幅(m)
 const SPECIAL_BUFF_WOBBLE_R_FREQ = 1.3; // 回転角速度に対する半径ゆらぎの周波数比
 const SPECIAL_BUFF_WOBBLE_Y_AMP = 2.0;  // 上下のゆらぎの振幅(m)
@@ -6474,6 +6494,7 @@ function updateHaroSlot(s, dt){
   }
 }
 function updateHaro(dt){
+  if (!vsMode && qblocksCollected < 2) return; // 序盤の慣らし演出:物資ブロックを2個取得するまでハロは出現しない(VS Modeは対象外)
   if (state === 'victory') return; // ラスボス撃破演出中は完全に停止
   // 通常は1体だけ出現し続けるが、ラスボス出現中は最大3体、VS Modeは常に2体(プレイヤー狙い・CPU狙い1体ずつ)同時に出現させる
   const activeCount = bossActive ? MAX_HAROS : (vsMode ? 2 : 1);
