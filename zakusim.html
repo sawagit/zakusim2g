@@ -222,16 +222,12 @@
     font-size:clamp(13px,3.7vw,16px); color:#fff; user-select:none; cursor:pointer;
   }
   #soundLabel input[type="checkbox"] { width:20px; height:20px; cursor:pointer; flex-shrink:0; }
-  #usageLink, #goUsageLink {
+  #usageLink {
     display:inline-block; margin-top:clamp(14px,3.8vw,22px);
     font-family: -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
     font-size:clamp(12px,3.4vw,15px); color:#9fd6ff; text-decoration:underline; cursor:pointer;
   }
-  #usageLink:hover, #goUsageLink:hover { color:#ffffff; }
-  #goUsageLink {
-    position:absolute; bottom:100px; left:50%; transform:translateX(-50%);
-    margin-top:0; white-space:nowrap;
-  }
+  #usageLink:hover { color:#ffffff; }
   #rankingBtn {
     display:inline-block; margin-top:clamp(8px,2.4vw,12px);
     font-family: -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
@@ -255,13 +251,12 @@
     background:rgba(255,255,255,0.92); color:#222; width:150px; text-align:center;
   }
   #goNameEntry .nameNote { width:100%; font-size:11px; opacity:0.65; margin-top:2px; }
-  #goNameSubmit, #rankingCloseBtn, #settingsCloseBtn, #goDigestReplayBtn, #goBackBtn, #vsResultBackBtn {
+  #goNameSubmit, #rankingCloseBtn, #settingsCloseBtn, #goBackBtn, #vsResultBackBtn {
     font-family: -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
     font-size:14px; font-weight:bold; color:#04151c;
     background:linear-gradient(180deg, rgba(125,220,255,0.9), rgba(77,200,255,0.75));
     border:none; border-radius:6px; padding:8px 18px; cursor:pointer; -webkit-tap-highlight-color:transparent;
   }
-  #goDigestReplayBtn { margin-top:12px; }
   #goBackBtn { margin-top:10px; display:block; background:linear-gradient(180deg, rgba(220,220,220,0.9), rgba(180,180,180,0.75)); }
   #rankingOverlay {
     display:none; position:fixed; left:0; top:0; width:100%; height:100%; z-index:25;
@@ -499,7 +494,6 @@
     #gameover .highscore { font-size:clamp(12px,4.4vh,22px); margin-top:4px; }
     #gameover .best { font-size:clamp(9px,2.8vh,13px); margin-top:3px; }
     #gameover .sub { bottom:24px; font-size:clamp(9px,2.8vh,14px); }
-    #goUsageLink { bottom:46px; }
 
     /* バーチャルスティック・アクションボタンは中央のプレイ領域を圧迫しないよう小さめにして両端の安全域も考慮する */
     #stick8 { left:calc(38px + env(safe-area-inset-left)); bottom:calc(10px + env(safe-area-inset-bottom)); width:130px; height:130px; }
@@ -580,7 +574,7 @@
 </div>
 <div id="pauseOverlay">⏸ PAUSE</div>
 <div id="demoLabel">DEMO PLAY - 何か操作すると戻ります</div>
-<div id="digestLabel">🎬 ハイライト再生中 - 何か操作するとスキップ</div>
+<div id="digestLabel">🎬 ハイライト再生中</div>
 <div id="theWorldBanner"></div>
 <div id="part2TeaseBanner">本当の戦いは第二部からだ！</div>
 <div id="tutorialHint"></div>
@@ -608,10 +602,8 @@
   </div>
   <div class="best" id="goBest">ベストクリアタイム: 未クリア</div>
   <div class="best" id="goTrophies">獲得トロフィー: 0/3</div>
-  <button type="button" id="goDigestReplayBtn" style="display:none;">🎬 ハイライトをもう一度見る</button>
   <button type="button" id="goBackBtn">↺ 戻る</button>
   <div class="sub" id="goSub" style="display:none;">Press Any Key / タップして再開</div>
-  <a id="goUsageLink" href="https://zakusim2g.vercel.app/usage.html" target="_blank" rel="noopener">📖 遊び方を見る</a>
   <div class="credit">Designed by やっさん / Programed by Claude Code</div>
 </div>
 <div id="difficulty">
@@ -3242,7 +3234,6 @@ function updateVsAnnounceToast(dt){
 }
 const trophyToastNameEl = document.getElementById('trophyToastName');
 const goTrophiesEl = document.getElementById('goTrophies');
-const goDigestReplayBtnEl = document.getElementById('goDigestReplayBtn');
 const bossAppearBannerEl = document.getElementById('bossAppearBanner');
 const congratsBannerEl = document.getElementById('congratsBanner');
 
@@ -3351,15 +3342,52 @@ function closeSettingsOverlay(){
   settingsOverlayOpen = false;
   settingsOverlayEl.style.display = 'none';
 }
+// デモ中はこの端末のローカルランキングと世界ランキングを交互に表示する(この端末だけの記録に偏らないようにするため)
+const DEMO_RANKING_TOGGLE_INTERVAL = 8.0; // 秒。この間隔でローカル⇔世界を切り替える
+let demoRankingToggleTimer = 0;
+let demoRankingShowWorld = false;
+let demoWorldRankingCache = { 1: null, 2: null }; // null=未取得、配列=取得済み(空配列も含む)。デモ開始のたびに取得し直す
+function fetchWorldRankingForDemo(diff){
+  fetch(WORLD_RANKING_URL + '?part=' + encodeURIComponent(diffLabel(diff)))
+    .then(res => res.json())
+    .then(data => { demoWorldRankingCache[diff] = data.ranking || []; if (demoActive) renderDemoRankingPanel(); })
+    .catch(() => { demoWorldRankingCache[diff] = []; if (demoActive) renderDemoRankingPanel(); });
+}
+function renderDemoRankingPanel(){
+  if (demoRankingShowWorld){
+    const w1 = demoWorldRankingCache[1], w2 = demoWorldRankingCache[2];
+    rankingCornerEl.innerHTML =
+      '<div class="rcTitle">🌍 世界ランキング</div>' +
+      '<div class="rcLv">第一部</div>' + (w1 ? buildWorldRankingRowsHTML(w1.slice(0,3)) : '<div class="rankingEmpty">読み込み中…</div>') +
+      '<div class="rcLv">第二部</div>' + (w2 ? buildWorldRankingRowsHTML(w2.slice(0,3)) : '<div class="rankingEmpty">読み込み中…</div>');
+  } else {
+    rankingCornerEl.innerHTML =
+      '<div class="rcTitle">🏆 ランキング(この端末)</div>' +
+      '<div class="rcLv">第一部</div>' + buildRankingColumnHTML(1, 3) +
+      '<div class="rcLv">第二部</div>' + buildRankingColumnHTML(2, 3);
+  }
+}
 function showDemoRanking(){
-  rankingCornerEl.innerHTML =
-    '<div class="rcTitle">🏆 ランキング(この端末)</div>' +
-    '<div class="rcLv">第一部</div>' + buildRankingColumnHTML(1, 3) +
-    '<div class="rcLv">第二部</div>' + buildRankingColumnHTML(2, 3);
+  demoRankingShowWorld = false;
+  demoRankingToggleTimer = 0;
+  demoWorldRankingCache = { 1: null, 2: null };
+  fetchWorldRankingForDemo(1);
+  fetchWorldRankingForDemo(2);
+  renderDemoRankingPanel();
   rankingCornerEl.style.display = 'block';
 }
 function hideDemoRanking(){
   rankingCornerEl.style.display = 'none';
+}
+// デモ中、一定間隔でローカル⇔世界ランキングの表示を切り替える(demoActive中は常時呼ぶ。デモのGAME OVER画面表示中も含めて切り替え続ける)
+function updateDemoRankingToggle(dt){
+  if (!demoActive) return;
+  demoRankingToggleTimer += dt;
+  if (demoRankingToggleTimer >= DEMO_RANKING_TOGGLE_INTERVAL){
+    demoRankingToggleTimer = 0;
+    demoRankingShowWorld = !demoRankingShowWorld;
+    renderDemoRankingPanel();
+  }
 }
 
 // ---- トロフィー ----
@@ -4454,8 +4482,6 @@ window.addEventListener('keydown', (e)=>{
 
   if (demoActive){ if (!e.repeat) cancelDemo(); return; } // デモ中は何かキーを押したら即座にタイトルへ戻す
 
-  if (digestPlaybackActive){ if (!e.repeat) finishDigestPlayback(); return; } // ハイライトダイジェスト再生中は何かキーを押したらスキップする
-
   // VS Modeの結果画面表示中は、Backspaceキーでも「戻る」ボタンと同じ動作(難易度選択画面へ)にする
   // (フォーカスは既にボタンへ当ててあるためEnter/Spaceでも反応するが、Backspaceは別途ここで拾う必要がある)
   if (vsMode && vsMatchOver){
@@ -4578,7 +4604,6 @@ const DIR8 = [
     ensureAudio();
     if (tutorialIntroActive){ endTutorialIntro(); return; } // チュートリアル導入メッセージ中は、何か操作すると即座に次へ進む
     if (demoActive){ cancelDemo(); return; }
-    if (digestPlaybackActive){ finishDigestPlayback(); return; } // ハイライトダイジェスト再生中は何か操作したらスキップする
     if (activeTouchId !== null) return; // 既に1本追跡中なら、追加の指は無視する
     const t = e.changedTouches[0];
     activeTouchId = t.identifier;
@@ -4612,7 +4637,6 @@ function wireActionButton(id, fn){
     ensureAudio();
     if (tutorialIntroActive){ endTutorialIntro(); return; } // チュートリアル導入メッセージ中は、何か操作すると即座に次へ進む
     if (demoActive){ cancelDemo(); return; }
-    if (digestPlaybackActive){ finishDigestPlayback(); return; } // ハイライトダイジェスト再生中は何か操作したらスキップする
     if (gameOver || awaitingDifficulty || paused) return;
     fn();
   }, { passive:false });
@@ -4695,9 +4719,7 @@ settingsOverlayEl.addEventListener('touchstart', (e)=>{ if (e.target === setting
 
 gameoverEl.addEventListener('touchstart', (e)=>{ e.preventDefault(); ensureAudio(); if (gameOver && !awaitingNameEntry && gameOverTimer >= GAMEOVER_WAIT_TIME) resetGame(); }, { passive:false });
 gameoverEl.addEventListener('click', (e)=>{ ensureAudio(); if (gameOver && !awaitingNameEntry && gameOverTimer >= GAMEOVER_WAIT_TIME) resetGame(); }); // Press Any KeyはPCのマウスクリックでも反応させる
-// GAME OVER画面内の「遊び方を見る」リンク・ニックネーム入力欄は、親要素(#gameover)のタップ/クリック=リセット処理に巻き込まれないようにする
-document.getElementById('goUsageLink').addEventListener('touchstart', (e)=>{ e.stopPropagation(); }, { passive:true });
-document.getElementById('goUsageLink').addEventListener('click', (e)=>{ e.stopPropagation(); });
+// GAME OVER画面内のニックネーム入力欄は、親要素(#gameover)のタップ/クリック=リセット処理に巻き込まれないようにする
 goNameEntryEl.addEventListener('touchstart', (e)=>{ e.stopPropagation(); }, { passive:true });
 goNameEntryEl.addEventListener('click', (e)=>{ e.stopPropagation(); });
 goNameInputEl.addEventListener('keydown', (e)=>{
@@ -4707,8 +4729,14 @@ goNameInputEl.addEventListener('keydown', (e)=>{
 document.getElementById('goNameSubmit').addEventListener('click', (e)=>{ e.stopPropagation(); confirmRankingName(); });
 document.getElementById('goNameSubmit').addEventListener('touchstart', (e)=>{ e.preventDefault(); e.stopPropagation(); confirmRankingName(); }, { passive:false });
 
-goDigestReplayBtnEl.addEventListener('click', (e)=>{ e.stopPropagation(); replayDigestFromGameOver(); });
-goDigestReplayBtnEl.addEventListener('touchstart', (e)=>{ e.preventDefault(); e.stopPropagation(); replayDigestFromGameOver(); }, { passive:false });
+// 「戻る」ボタンはニックネーム入力待ち中でも押せるようにする(未入力のまま=無名扱いで、そのままタイトルへ戻る)。
+// 入力待ちでない通常時は、他の復帰操作と同じくGAMEOVER_WAIT_TIME(誤操作によるすぐの再スタート防止の待ち時間)を守る
+function backToTitleFromGameOver(){
+  if (awaitingNameEntry) confirmRankingName(); // 入力欄が空ならローカル・世界ランキングとも登録せず、そのままタイトルへ戻る
+  else if (gameOverTimer >= GAMEOVER_WAIT_TIME) resetGame();
+}
+document.getElementById('goBackBtn').addEventListener('click', (e)=>{ e.stopPropagation(); ensureAudio(); backToTitleFromGameOver(); });
+document.getElementById('goBackBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); e.stopPropagation(); ensureAudio(); backToTitleFromGameOver(); }, { passive:false });
 
 // 常時表示のリセットボタン(画面上部中央)。どの状態からでもすぐに難易度選択画面へ戻れる
 const resetBtnEl = document.getElementById('resetBtn');
@@ -4725,7 +4753,6 @@ const pauseOverlayEl = document.getElementById('pauseOverlay');
 function togglePause(){
   if (tutorialIntroActive){ endTutorialIntro(); return; } // チュートリアル導入メッセージ中は、PAUSEボタン等での操作も次へ進める扱いにする
   if (demoActive){ cancelDemo(); return; } // デモ中はポーズせず、そのままタイトルへ戻す
-  if (digestPlaybackActive){ finishDigestPlayback(); return; } // ハイライトダイジェスト再生中はポーズせず、そのままスキップする
   if (awaitingDifficulty || gameOver) return;
   paused = !paused;
   pauseBtnEl.classList.toggle('active', paused);
@@ -4989,7 +5016,6 @@ function updateGamepadInner(dt){
   if (tutorialIntroActive){ if (anyPressed) endTutorialIntro(); return; } // チュートリアル導入メッセージ中は、何か操作すると即座に次へ進む
 
   if (demoActive){ if (anyPressed) cancelDemo(); return; }
-  if (digestPlaybackActive){ if (anyPressed) finishDigestPlayback(); return; } // ハイライトダイジェスト再生中はコントローラー操作でもスキップする
 
   if (awaitingDifficulty){
     if (rankingOverlayOpen || settingsOverlayOpen) return;
@@ -5518,13 +5544,8 @@ function update(dt){
 
     victoryTimer += dt;
     if (victoryTimer >= VICTORY_DURATION){
-      // 記録できたハイライトがあればダイジェストを再生してからGAME OVER画面へ。無ければ従来通りそのまま進む
-      if (!demoActive && startDigestPlayback()){
-        congratsBannerEl.style.display = 'none';
-      } else {
-        congratsBannerEl.style.display = 'none';
-        finishGame(true);
-      }
+      congratsBannerEl.style.display = 'none';
+      finishGame(true); // 記録できたハイライトがあれば、この中でGAME OVER画面の背景ループ再生を開始する
     }
   }
 
@@ -5589,14 +5610,15 @@ function finishGame(isVictory){
     ? ('ベストタイム('+diffLabel(difficulty)+'): ' + best.toFixed(1) + 's')
     : ('ベストタイム('+diffLabel(difficulty)+'): 未クリア');
   goTrophiesEl.textContent = '獲得トロフィー: ' + ownedTrophies.size + '/' + Object.keys(TROPHIES).length;
-  goDigestReplayBtnEl.style.display = Object.keys(digestCapturedClips).length ? 'inline-block' : 'none';
 
   gameOverTimer = 0;
   gameOverSubShown = false;
   goSubEl.style.display = 'none';
   gameoverEl.style.display = 'flex';
+  if (isVictory) startDigestPlayback(); // 記録できたハイライトがあれば、GAME OVER画面の背景でループ再生する(無ければ何もしない)
 }
-// ランキング入りタイムのニックネーム登録を確定する(入力欄の「登録」ボタン、またはEnterキーから呼ばれる)
+// ランキング入りタイムのニックネーム登録を確定する(入力欄の「登録」ボタン、Enterキー、または「戻る」ボタンから呼ばれる)。
+// 確定後は表示を更新して待つのではなく、そのまま自動的にタイトルへ戻る
 function confirmRankingName(){
   if (!awaitingNameEntry) return;
   const name = (goNameInputEl.value || '').trim().slice(0, 10);
@@ -5604,19 +5626,8 @@ function confirmRankingName(){
     saveLastName(name);
     insertRanking(pendingRankingDiff, pendingRankingTime, name);
     submitWorldRanking(pendingRankingDiff, pendingRankingTime, name);
-  } // 名前を空欄のまま登録した場合は、ローカル・世界ランキングともスコアを登録しない
-  const diff = pendingRankingDiff;
-  awaitingNameEntry = false;
-  pendingRankingDiff = null;
-  goNameEntryEl.style.display = 'none';
-  const best = bestTime(diff);
-  goBestEl.textContent = 'ベストタイム('+diffLabel(diff)+'): ' + best.toFixed(1) + 's';
-  goBestEl.style.display = 'block';
-  // 名前入力で待たされていた「Press Any Key」表示を、待ち時間をすでに満たしていれば即座に出す
-  if (!gameOverSubShown && gameOverTimer >= GAMEOVER_WAIT_TIME){
-    gameOverSubShown = true;
-    goSubEl.style.display = 'block';
-  }
+  } // 名前を空欄のまま確定した場合は、ローカル・世界ランキングとも登録しない(無名扱い)
+  resetGame();
 }
 
 function triggerGameOver(x,y,z){
@@ -6779,7 +6790,7 @@ function fireDigestEffects(clip, localT){
 
 function updateDigestPlayback(dt){
   const clip = digestClips[digestClipIndex];
-  if (!clip){ finishDigestPlayback(); return; }
+  if (!clip){ digestPlaybackActive = false; return; } // digestClipsが空の場合の保険(通常は発生しない)
   digestClipTimer += dt;
   const frame = findDigestFrame(clip, digestClipTimer);
   applyDigestFrame(frame, dt);
@@ -6789,11 +6800,8 @@ function updateDigestPlayback(dt){
   if (digestClipTimer >= digestClipDuration){
     digestClipIndex++;
     digestClipTimer = 0;
-    if (digestClipIndex < digestClips.length){
-      startDigestClip(digestClips[digestClipIndex]);
-    } else {
-      finishDigestPlayback();
-    }
+    if (digestClipIndex >= digestClips.length) digestClipIndex = 0; // GAME OVER画面の背景として、最後まで再生したら最初に戻ってループする
+    startDigestClip(digestClips[digestClipIndex]);
   }
 }
 
@@ -6808,26 +6816,6 @@ function updateDigestCamera(f, frame){
   camera.position.y = ty + camDist*Math.sin(camPitch);
   camera.position.z = tz + camDist*Math.cos(camPitch)*Math.cos(camYaw);
   camera.lookAt(tx, ty, tz);
-}
-
-function finishDigestPlayback(){
-  digestPlaybackActive = false;
-  if (digestLabelEl) digestLabelEl.style.display = 'none';
-  digestZakuPool.forEach(m => m.group.visible = false);
-  invertWorldColors(false); // 再生中にネガポジ反転していた場合に備え、通常の配色に戻しておく
-  stopThrusterSound(); // 再生中にバーニア音が鳴っていた場合に備えて止めておく
-  if (gameOver){
-    // GAME OVER画面の「もう一度見る」ボタンからの再生だった場合は、finishGameをやり直さずそのまま画面に戻るだけにする
-    gameoverEl.style.display = 'flex';
-  } else {
-    congratsBannerEl.style.display = 'none';
-    finishGame(true);
-  }
-}
-// GAME OVER画面の「🎬 ハイライトをもう一度見る」ボタンから呼ばれる
-function replayDigestFromGameOver(){
-  if (!startDigestPlayback()) return;
-  gameoverEl.style.display = 'none';
 }
 
 // ============================================================
@@ -7201,6 +7189,7 @@ function loop(now){
     }
   }
   updatePart2TeaseBanner(dt);
+  updateDemoRankingToggle(dt);
   if (digestPlaybackActive){
     updateDigestPlayback(dt);
   } else if (!gameOver && !awaitingDifficulty && !paused){
