@@ -3637,17 +3637,19 @@ let demoDiffNext = 1;
 let rankingOverlayOpen = false; // ランキングオーバーレイ表示中はタイトル画面の自動デモ開始タイマーを止める
 let settingsOverlayOpen = false; // 設定オーバーレイ表示中も同様にタイマー・ゲーム開始キーを止める
 const demoLabelEl = document.getElementById('demoLabel');
-// スマホ放置によるバッテリー消耗を防ぐため、実際の操作が一定時間ないまま自動デモが流れ続けたら自動再生を止める。
-// デモが何度も繰り返し起動・終了しても、この間ずっと本当に無操作なら合計時間として積み上がり続ける(1回のデモの長さでは判定しない)
-const DEMO_AUTOPLAY_LIMIT = 600.0; // 秒(10分)。この間ずっと無操作が続いたら自動再生を停止する
+// スマホ放置によるバッテリー消耗を防ぐための省電力スリープ。実際の操作がないまま「自動デモが流れ続けている」
+// 「GAME OVER画面でハイライトがループし続けている」「ポーズしたまま」といった状態が合計10分続いたら、
+// 3Dの描画(renderer.render)そのものを止めて待機する。デモが何度も繰り返し起動・終了しても、
+// その間ずっと本当に無操作なら合計時間として積み上がり続ける(1回のデモ・1回のプレイの長さでは判定しない)
+const IDLE_SLEEP_LIMIT = 600.0; // 秒(10分)。この間ずっと無操作が続いたら省電力スリープに入る
 let totalUnattendedTime = 0;
-let demoAutoplaySuspended = false; // 無操作タイムアウトにより自動デモを止めた状態(何か操作すると解除される)
+let powerSaveSleeping = false; // 省電力スリープ中(描画・ゲーム進行とも停止。何か操作すると解除される)
 const demoSleepNoteEl = document.getElementById('demoSleepNote');
-// 実際にユーザーが操作した瞬間に呼ぶ。無操作の積算時間をリセットし、自動デモの停止状態も解除する
+// 実際にユーザーが操作した瞬間に呼ぶ。無操作の積算時間をリセットし、省電力スリープも解除する
 function markUserActive(){
   totalUnattendedTime = 0;
-  if (demoAutoplaySuspended){
-    demoAutoplaySuspended = false;
+  if (powerSaveSleeping){
+    powerSaveSleeping = false;
     demoSleepNoteEl.style.display = 'none';
   }
 }
@@ -3677,18 +3679,27 @@ function cancelDemo(){
   markUserActive(); // 実際の操作でデモが中断された = ユーザーがいる証拠なので、無操作の積算時間をリセットする
   resetGame(); // resetGame内でdemoActiveをfalseに戻し、タイトル画面(難易度選択)を再表示する
 }
-// 本当に無操作(デモが何度も自動で繰り返し起動・終了しているだけ)の時間がDEMO_AUTOPLAY_LIMITに達したら、
-// スマホを放置したままの電池消耗を防ぐため自動デモを止める。markUserActive()はここでは呼ばない(呼ぶと積算時間が消えてしまうため)
-function suspendDemoForBattery(){
-  demoAutoplaySuspended = true;
-  demoSleepNoteEl.style.display = 'block';
-  if (demoActive) resetGame(); // タイトル画面(難易度選択)に戻して停止させる。再開は何か操作した瞬間(markUserActive())
+// 本当に無操作の時間がIDLE_SLEEP_LIMITに達したら、スマホを放置したままの電池消耗を防ぐため省電力スリープに入る。
+// markUserActive()はここでは呼ばない(呼ぶと積算時間が消えてしまうため)
+function enterPowerSaveSleep(){
+  powerSaveSleeping = true;
+  digestPlaybackActive = false; // GAME OVER画面の背景で回り続けるハイライトのループもここで止める(最後のコマのまま静止する)
+  if (demoActive){
+    resetGame(); // 自動デモ中だった場合はタイトル画面(難易度選択)へ戻したうえで止める
+    demoSleepNoteEl.style.display = 'block'; // 案内はタイトル画面上の要素のため、タイトルへ戻したときだけ出す
+  } else if (awaitingDifficulty){
+    demoSleepNoteEl.style.display = 'block';
+  }
+  // GAME OVER画面・ポーズ中にスリープした場合は、その画面をそのまま静止画として残す(表示中のスコア等は読めるまま)
 }
-function updateDemoAutoplayWatchdog(dt){
-  if (demoAutoplaySuspended) return;
-  if (demoActive || (awaitingDifficulty && !rankingOverlayOpen && !settingsOverlayOpen)){
+// 「遊んでいない状態」(自動デモ、タイトル待機、GAME OVER画面、ポーズ中)が無操作で続いた時間を積算する。
+// 実プレイ中は対象外(操作せず放置してもいずれドクロにやられてGAME OVERになり、そこから改めて積算される)
+function updateIdleSleepWatchdog(dt){
+  if (powerSaveSleeping) return;
+  const unattended = demoActive || gameOver || paused || (awaitingDifficulty && !rankingOverlayOpen && !settingsOverlayOpen);
+  if (unattended){
     totalUnattendedTime += dt;
-    if (totalUnattendedTime >= DEMO_AUTOPLAY_LIMIT) suspendDemoForBattery();
+    if (totalUnattendedTime >= IDLE_SLEEP_LIMIT) enterPowerSaveSleep();
   }
 }
 // デモ開始直後、まだ2個目の物資ブロックを取っていない間だけ、最も近い生存中のブロックへまっすぐ向かう
@@ -4731,6 +4742,14 @@ difficultyEl.addEventListener('touchstart', ()=>{ titleIdleTimer = 0; markUserAc
 difficultyEl.addEventListener('mousedown', ()=>{ titleIdleTimer = 0; markUserActive(); });
 difficultyEl.addEventListener('change', ()=>{ titleIdleTimer = 0; markUserActive(); });
 
+// 省電力スリープからの復帰漏れを防ぐ保険。個別のハンドラより先(キャプチャ段階)に画面全体で入力を拾い、
+// スリープ解除だけを行う(イベント自体は止めないので、その後の通常の処理はこれまで通り実行される)
+['pointerdown','mousedown','touchstart','keydown','wheel'].forEach(type => {
+  window.addEventListener(type, markUserActive, { capture:true, passive:true });
+});
+// タブに戻ってきた/画面が復帰したときも、無操作の積算をリセットしておく
+document.addEventListener('visibilitychange', ()=>{ if (!document.hidden) markUserActive(); });
+
 // ランキング(この端末のローカル記録)。タイトル画面のボタンから開閉する
 const rankingBtnEl = document.getElementById('rankingBtn');
 rankingBtnEl.addEventListener('click', (e)=>{ e.stopPropagation(); ensureAudio(); openRankingOverlay(); });
@@ -5050,7 +5069,10 @@ function updateGamepadInner(dt){
   const pressedNow = (i) => isDown[i] && !wasDown[i];
   const anyPressed = isDown.some(v => v);
   gpPrevButtons = isDown;
-  if (anyPressed) ensureAudio(); // 他の入力手段と同様、ボタン入力のたびにAudioContextの起動/再開を試みる
+  if (anyPressed){
+    ensureAudio(); // 他の入力手段と同様、ボタン入力のたびにAudioContextの起動/再開を試みる
+    markUserActive(); // 省電力スリープ中でもゲームパッド操作で復帰できるようにする(この関数はスリープ中も毎フレーム呼ばれている)
+  }
 
   if (tutorialIntroActive){ if (anyPressed) endTutorialIntro(); return; } // チュートリアル導入メッセージ中は、何か操作すると即座に次へ進む
 
@@ -7217,6 +7239,13 @@ function loop(now){
   lastTime = now;
 
   updateGamepad(dt); // ゲームパッド接続中のみ内部で処理する。状態(タイトル/プレイ中/ポーズ等)ごとの分岐は関数内で完結させている
+
+  // 省電力スリープ中は、ゲームの進行も3Dの描画(renderer.render)も一切行わずに待機する。
+  // 画面には最後に描画されたコマがそのまま残り、HTML側のUI(タイトル画面・GAME OVER画面のボタン等)は通常どおり操作できる。
+  // 何らかの操作があればmarkUserActive()でフラグが下り、次のフレームから通常どおり描画・進行が再開する
+  // (ゲームパッドで復帰できるよう、updateGamepad()だけはこの上で毎フレーム呼び続けている)
+  if (powerSaveSleeping) return;
+
   updateTutorialIntro(dt); // チュートリアル導入メッセージ(メッセージ0)の10秒タイマー。paused中でも進める必要があるため通常のゲート外で呼ぶ
 
   if (awaitingDifficulty && !rankingOverlayOpen && !settingsOverlayOpen){
@@ -7225,10 +7254,10 @@ function loop(now){
       markUserActive();
     } else {
       titleIdleTimer += dt;
-      if (titleIdleTimer >= TITLE_DEMO_IDLE && !demoAutoplaySuspended) startDemo();
+      if (titleIdleTimer >= TITLE_DEMO_IDLE) startDemo();
     }
   }
-  updateDemoAutoplayWatchdog(dt);
+  updateIdleSleepWatchdog(dt);
   updatePart2TeaseBanner(dt);
   updateDemoRankingToggle(dt);
   if (digestPlaybackActive){
