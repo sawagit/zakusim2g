@@ -2480,7 +2480,7 @@ function updateBossDefeatFall(dt){
 const COLONY_TIME_LIMIT = 20.0;     // 秒。この時間までにラスボスを撃破できないと落ちてくる(演出の検証用に短くした暫定値。本来は100秒)
 const COLONY_FALL_TIME = 9.6;       // 上空から着弾するまでの時間(秒)。当初3.2秒だったが、じっくり見せるため1/3の速度に落とした
 const COLONY_COUNTDOWN_TIME = 10.0; // 落下の何秒前からカウントダウンを表示するか
-const COLONY_BLAST_TIME = 6.6;      // 着弾後、ドーム状の爆発が広がりきるまでの時間(秒)。当初2.2秒から3倍に伸ばしてゆっくり広がるようにした
+const COLONY_BLAST_TIME = 4.0;      // 着弾後、ドーム状の爆発が広がりきるまでの時間(秒)。2.2秒→6.6秒と伸ばしたが長すぎたため4秒に調整
 const COLONY_WHITEOUT_HOLD = 0.35;  // 画面が真っ白になったまま保持する時間(秒)
 const COLONY_WHITEOUT_FADE = 1.4;   // 白から「背景だけの画」へ戻していく時間(秒)
 const COLONY_RADIUS = 90.0;         // 円筒の半径(m)
@@ -2585,6 +2585,7 @@ function resetColonyDrop(){
   colonyDrop.phase = '';
   colonyDrop.timer = 0;
   restoreStageAfterColonyBlast();
+  if (colonyPrevFov >= 0){ camera.fov = colonyPrevFov; camera.updateProjectionMatrix(); colonyPrevFov = -1; } // 広角にしていた画角を元に戻す
   colonyGroup.visible = false;
   colonyShadowMesh.visible = false;
   colonyBlastDome.visible = false;
@@ -2601,21 +2602,30 @@ function startColonyDrop(){
   // 落下地点は常にステージ中央(原点)
   colonyDrop.x = 0; colonyDrop.z = 0;
   colonyGroup.rotation.set(0, Math.random()*Math.PI*2, COLONY_TILT); // 向きは毎回ランダムだが、落下中は回転させない
+  if (colonyPrevFov < 0){ colonyPrevFov = camera.fov; camera.fov = COLONY_CAM_FOV; camera.updateProjectionMatrix(); } // 演出中はレンズを広角にする
   colonyGroup.visible = true;
   colonyShadowMesh.position.set(colonyDrop.x, 0.05, colonyDrop.z);
   colonyShadowMesh.visible = true;
 }
 // 落下中〜爆発中は通常の追従カメラを止め、落下地点を斜め横から捉える演出用のカメラワークに切り替える
 // (真上から落ちてくるため、通常の背面視点のままではコロンが画面に映らない)
+// 演出カメラの位置は「カメラ → プレイヤー → コロンの着弾地点」が一直線に並ぶ配置にする。
+// 距離はこのゲームのズームの上限(150m)まで引いた広角の振り切りで、自機を手前に入れたまま落下地点を見る
+const COLONY_CAM_DIST = 100.0; // m(自機の後方へ下がる距離)
+const COLONY_CAM_HEIGHT = 5.0; // m(地面すれすれの低い位置。ここから見上げる「あおり」の画にする)
+const COLONY_CAM_FOV = 90;      // 度。演出中だけレンズも広角に振り切る(通常の画角では、落ちてくるコロンが最後の一瞬しか画面に入らないため)
+let colonyPrevFov = -1;         // 演出前の画角(終了時に元へ戻す)
 function updateColonyCamera(){
-  // カメラはプレイヤーの立っている位置に据え置き、ステージ中央へ落ちてくるコロンを見上げる画にする。
-  // 巨大な物体のため画面から見切れるが、「自分のいる場所から見上げている」感じを優先する。
-  // 着弾後は、目の前の筒で埋まって爆発が見えなくなってしまうため、注視点を着弾点付近へ下ろす
   const cp = colonyGroup.position;
-  const ux = Math.sin(camYaw), uz = Math.cos(camYaw); // 直前まで見ていた向きを基準に、自機のすぐ後ろへ回る
-  camera.position.set(pos.x + ux*45, airY + 30, pos.z + uz*45);
-  if (colonyDrop.phase === 'falling') camera.lookAt(cp.x, cp.y, cp.z);
-  else camera.lookAt(colonyDrop.x, 80, colonyDrop.z);
+  // 着弾地点から見て、プレイヤーのさらに後方へカメラを置く
+  let bx = pos.x - colonyDrop.x, bz = pos.z - colonyDrop.z;
+  const blen = Math.hypot(bx, bz);
+  if (blen < 1){ bx = Math.sin(camYaw); bz = Math.cos(camYaw); } // 着弾地点にほぼ重なっている場合は直前の視線を基準にする
+  else { bx /= blen; bz /= blen; }
+  camera.position.set(pos.x + bx*COLONY_CAM_DIST, airY + COLONY_CAM_HEIGHT, pos.z + bz*COLONY_CAM_DIST);
+  // 注視点は着弾地点のやや上に固定する(コロンに合わせて見上げると自機が画面から外れてしまうため)。
+  // コロンは落下の終盤に画面の上から入ってきて、そのまま目の前へ突き刺さる
+  camera.lookAt(colonyDrop.x, 90, colonyDrop.z);
 }
 function updateColonyDrop(dt){
   if (!colonyDrop.active) return;
@@ -7713,7 +7723,8 @@ function loop(now){
   // ダイジェスト再生中はupdateDigestPlayback内で専用のカメラワークを適用済みのため、ここでは呼ばない
   // コロン落としの演出中は、updateColonyDrop内の専用カメラワークを適用済みのため通常の追従カメラは動かさない
   if (!digestPlaybackActive && !colonyDrop.active && !gameOver && !awaitingDifficulty) updateCamera(dt);
-  if (!digestPlaybackActive && !gameOver && !awaitingDifficulty) updateQBlockTargeting();
+  // コロン落としの演出中は物資ブロックの[+]/Target表示も消す(演出の邪魔になるため)
+  if (!digestPlaybackActive && !colonyDrop.active && !gameOver && !awaitingDifficulty) updateQBlockTargeting();
   else { qblockReticleEls.forEach(el => { el.style.display = 'none'; }); offscreenTargetEl.style.display = 'none'; }
 
   renderer.render(scene, camera);
