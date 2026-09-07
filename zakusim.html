@@ -2585,6 +2585,7 @@ function resetColonyDrop(){
   colonyDrop.phase = '';
   colonyDrop.timer = 0;
   restoreStageAfterColonyBlast();
+  if (colonyPrevFov >= 0){ camera.fov = colonyPrevFov; camera.updateProjectionMatrix(); colonyPrevFov = -1; } // 広角にしていた画角を元に戻す
   colonyGroup.visible = false;
   colonyShadowMesh.visible = false;
   colonyBlastDome.visible = false;
@@ -2601,21 +2602,30 @@ function startColonyDrop(){
   // 落下地点は常にステージ中央(原点)
   colonyDrop.x = 0; colonyDrop.z = 0;
   colonyGroup.rotation.set(0, Math.random()*Math.PI*2, COLONY_TILT); // 向きは毎回ランダムだが、落下中は回転させない
+  if (colonyPrevFov < 0){ colonyPrevFov = camera.fov; camera.fov = COLONY_CAM_FOV; camera.updateProjectionMatrix(); } // 演出中はレンズを広角にする
   colonyGroup.visible = true;
   colonyShadowMesh.position.set(colonyDrop.x, 0.05, colonyDrop.z);
   colonyShadowMesh.visible = true;
 }
 // 落下中〜爆発中は通常の追従カメラを止め、落下地点を斜め横から捉える演出用のカメラワークに切り替える
 // (真上から落ちてくるため、通常の背面視点のままではコロンが画面に映らない)
+// 演出カメラの位置は「カメラ → プレイヤー → コロンの着弾地点」が一直線に並ぶ配置にする。
+// 距離はこのゲームのズームの上限(150m)まで引いた広角の振り切りで、自機を手前に入れたまま落下地点を見る
+const COLONY_CAM_DIST = 150.0; // m(通常のズーム操作の上限と同じ=一番引いた状態)
+const COLONY_CAM_HEIGHT = 45.0; // m(自機の頭越しに落下地点を見下ろせる程度の高さ)
+const COLONY_CAM_FOV = 90;      // 度。演出中だけレンズも広角に振り切る(通常の画角では、落ちてくるコロンが最後の一瞬しか画面に入らないため)
+let colonyPrevFov = -1;         // 演出前の画角(終了時に元へ戻す)
 function updateColonyCamera(){
-  // カメラはプレイヤーの立っている位置に据え置き、ステージ中央へ落ちてくるコロンを見上げる画にする。
-  // 巨大な物体のため画面から見切れるが、「自分のいる場所から見上げている」感じを優先する。
-  // 着弾後は、目の前の筒で埋まって爆発が見えなくなってしまうため、注視点を着弾点付近へ下ろす
   const cp = colonyGroup.position;
-  const ux = Math.sin(camYaw), uz = Math.cos(camYaw); // 直前まで見ていた向きを基準に、自機のすぐ後ろへ回る
-  camera.position.set(pos.x + ux*45, airY + 30, pos.z + uz*45);
-  if (colonyDrop.phase === 'falling') camera.lookAt(cp.x, cp.y, cp.z);
-  else camera.lookAt(colonyDrop.x, 80, colonyDrop.z);
+  // 着弾地点から見て、プレイヤーのさらに後方へカメラを置く
+  let bx = pos.x - colonyDrop.x, bz = pos.z - colonyDrop.z;
+  const blen = Math.hypot(bx, bz);
+  if (blen < 1){ bx = Math.sin(camYaw); bz = Math.cos(camYaw); } // 着弾地点にほぼ重なっている場合は直前の視線を基準にする
+  else { bx /= blen; bz /= blen; }
+  camera.position.set(pos.x + bx*COLONY_CAM_DIST, airY + COLONY_CAM_HEIGHT, pos.z + bz*COLONY_CAM_DIST);
+  // 注視点は着弾地点のやや上に固定する(コロンに合わせて見上げると自機が画面から外れてしまうため)。
+  // コロンは落下の終盤に画面の上から入ってきて、そのまま目の前へ突き刺さる
+  camera.lookAt(colonyDrop.x, 90, colonyDrop.z);
 }
 function updateColonyDrop(dt){
   if (!colonyDrop.active) return;
