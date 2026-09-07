@@ -404,13 +404,15 @@
     max-width:88vw;
   }
   #trophyToast .name { display:block; font-size:15px; font-weight:normal; margin-top:3px; white-space:normal; }
-  /* スマホでは中央上部だと自機モデルやチュートリアルヒントと重なって邪魔になるため、左下(操作ボタン群より上)へ寄せる。
-     本体側のtop:190pxを打ち消すため、あえて#trophyToast定義より後ろに置く(同じ詳細度なので後勝ちになる) */
+  /* スマホでは中央上部だと自機モデルやチュートリアルヒントと重なって邪魔になるため、バーチャルスティック・操作ボタンより
+     上の右寄りの空間へ小さめに表示する。本体側のtop:190pxを打ち消すため、あえて#trophyToast定義より後ろに置く
+     (同じ詳細度なので後勝ちになる) */
   @media (pointer:coarse){
     #trophyToast {
-      top:auto; bottom:calc(150px + env(safe-area-inset-bottom)); left:calc(12px + env(safe-area-inset-left));
-      transform:none; text-align:left;
+      top:auto; bottom:calc(210px + env(safe-area-inset-bottom)); left:auto; right:calc(20px + env(safe-area-inset-right));
+      transform:none; font-size:8px; padding:4px 8px; max-width:52vw;
     }
+    #trophyToast .name { font-size:7px; }
   }
   /* VS Mode専用の告知トースト(「残り1個!」等)。トロフィートーストと同じ見た目を流用する */
   #vsAnnounceToast {
