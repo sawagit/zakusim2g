@@ -3783,6 +3783,8 @@ function checkSkullPlayerHit(s){
 // ---- 敵ザク(Lv.2限定。プレイヤーと同じ姿で空から降下し、着地後プレイヤーへ突進する) ----
 const ZAKU_SPAWN_INTERVAL = 5.0;     // 5秒毎に1機出現する(第三部はこの半分の間隔=2倍の頻度にする)
 const ZAKU_SPAWN_HEIGHT = 120.0;     // 出現時の高度
+const ZAKU_FREQ_RAMP_START_COUNT = 6; // 物資ブロックをこの個数目以降取得するたび、出現頻度が倍になる(第二部・第三部限定。銀玉の自動迎撃で凌ぐことを想定した終盤の難易度上昇)
+let zakuSpawnFreqMult = 1.0;
 const ZAKU_SPAWN_RADIUS_MIN = 50.0;  // 出現距離の下限(m)
 const ZAKU_SPAWN_RADIUS_MAX = 500.0; // 出現距離の上限(m)。プレイヤーからこの範囲内のランダムな距離に降下してくる
 const ZAKU_FALL_SPEED = 30.0;        // m/s(降下速度)
@@ -3883,7 +3885,7 @@ function updateZakus(dt){
   if (difficulty === 1) return; // 第一部限定で無し(第二部・第三部は出現する)
   if (theWorldActive || state === 'victory') return; // ザ・世界中・ラスボス撃破演出中は出現・移動・タックル判定とも停止する(他の敵と同様)
 
-  const spawnInterval = (difficulty === 3) ? ZAKU_SPAWN_INTERVAL * 0.5 : ZAKU_SPAWN_INTERVAL;
+  const spawnInterval = ((difficulty === 3) ? ZAKU_SPAWN_INTERVAL * 0.5 : ZAKU_SPAWN_INTERVAL) / zakuSpawnFreqMult;
   zakuSpawnTimer += dt;
   if (zakuSpawnTimer >= spawnInterval){
     zakuSpawnTimer -= spawnInterval;
@@ -4162,6 +4164,7 @@ function resetGame(){
   for (let i=zakus.length-1;i>=0;i--) removeZaku(i);
   zakuSpawnTimer = 0;
   zakuSpawnCount = 0;
+  zakuSpawnFreqMult = 1.0;
 
   invincibleMode = false;
 
@@ -6112,6 +6115,9 @@ function updateQBlock(dt){
     }
     qblocksCollected++;
     if (qblocksCollected === SPECIAL_QBLOCK_REVEAL_COUNT) revealSpecialQBlock(); // 第二部・第三部限定(内部でdifficultyを判定)
+    // 6個目以降の取得毎に敵ザクの出現頻度を倍にする(第一部はそもそも敵ザクが出現しないため実質無関係)。
+    // 終盤(スペシャルブロックの銀玉で凌ぐことを想定した)難易度上昇
+    if (qblocksCollected >= ZAKU_FREQ_RAMP_START_COUNT) zakuSpawnFreqMult *= 2;
     if (qblocksCollected === 1) triggerDigestCapture('first_block'); // ハイライトダイジェスト用
     if (qblocksCollected === qblockLastWarningCount(difficulty)){
       awardTrophy('qblock_9'); // 難易度ごとに定めた「あと一つ」のタイミングで表示する(テキストはqblock_9(あと一つ！！)を流用)
