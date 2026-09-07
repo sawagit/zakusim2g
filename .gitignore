@@ -1,2 +1,4 @@
 ﻿claude.md
 セットアップとデプロイ手順.html
+node_modules/
+package-lock.json
