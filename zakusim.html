@@ -464,6 +464,21 @@
     padding:16px 30px; box-shadow:0 0 24px rgba(168,85,247,0.7); pointer-events:none;
     max-width:90vw; text-shadow:0 0 10px rgba(168,85,247,0.9);
   }
+  /* コロン落としの着弾後、画面全体を白く飛ばすためのオーバーレイ(不透明度はJS側で制御する)。
+     GAME OVER画面(z-index:20)より下に置き、白が引いたあとにGAME OVER画面が出るようにする */
+  #colonyWhiteout {
+    display:none; position:fixed; left:0; top:0; width:100%; height:100%; z-index:19;
+    background:#ffffff; opacity:0; pointer-events:none;
+  }
+  /* 制限時間内にラスボスを倒せなかったときの「コロン落とし」告知。ボス出現時のバナーと同じ作りで、配色だけ警告色にする */
+  #colonyBanner {
+    display:none; position:fixed; top:340px; left:50%; transform:translateX(-50%); z-index:14;
+    font-family: -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+    font-size:26px; font-weight:bold; color:#fff2d0; text-align:center; letter-spacing:2px;
+    background:linear-gradient(180deg,#4a1a00,#7a2a00); border:2px solid #ff8a00; border-radius:10px;
+    padding:16px 30px; box-shadow:0 0 24px rgba(255,138,0,0.75); pointer-events:none;
+    max-width:90vw; text-shadow:0 0 10px rgba(255,138,0,0.95); animation:blink 0.6s infinite;
+  }
   #congratsBanner {
     display:none; position:fixed; left:0; top:0; width:100%; height:100%; z-index:18;
     align-items:center; justify-content:center; flex-direction:column;
@@ -590,6 +605,8 @@
 <div id="qblockTargetsLayer"></div>
 <div id="offscreenTarget"><span class="ot-label">Target</span><span class="ot-arrow">▶</span></div>
 <div id="bossAppearBanner">「見える。<br>私にも敵が見える」</div>
+<div id="colonyBanner">⚠️ コロン落下!!<br>退避が間に合わない</div>
+<div id="colonyWhiteout"></div>
 <div id="congratsBanner">
   <div class="big">CONGRATURATION !!!</div>
   <div class="sub2">ラストシューティング</div>
@@ -2061,10 +2078,12 @@ const QBLOCK_FG = 0x2b2b2b; // 物資ブロックに改名したことに合わ�
 const qblockGeo = new THREE.BoxGeometry(QBLOCK_SIZE,QBLOCK_SIZE,QBLOCK_SIZE);
 const qblockMat = new THREE.MeshStandardMaterial({ map:createQBlockTexture(QBLOCK_COLOR, QBLOCK_FG), metalness:0.6, roughness:0.15 });
 const qblockMatInverted = new THREE.MeshStandardMaterial({ map:createQBlockTexture(invertHex(QBLOCK_COLOR), invertHex(QBLOCK_FG)), metalness:0.6, roughness:0.15 });
-// スペシャルブロック(第二部・第三部限定、5個目以降からランダムに1個選ばれる)用の専用の柄。通常と見分けが付くよう黒色地にする
-const SPECIAL_QBLOCK_COLOR = 0x1a1a1a, SPECIAL_QBLOCK_FG = 0x8a2be2;
-const specialQBlockMat = new THREE.MeshStandardMaterial({ map:createQBlockTexture(SPECIAL_QBLOCK_COLOR, SPECIAL_QBLOCK_FG), metalness:0.6, roughness:0.15 });
-const specialQBlockMatInverted = new THREE.MeshStandardMaterial({ map:createQBlockTexture(invertHex(SPECIAL_QBLOCK_COLOR), invertHex(SPECIAL_QBLOCK_FG)), metalness:0.6, roughness:0.15 });
+// スペシャルブロック(第二部・第三部限定、5個目以降からランダムに1個選ばれる)用の専用の柄。
+// 通常のブロックと遠目でもはっきり見分けが付くよう、黒色地から発光する赤色地に変更した(第二部・第三部共通)
+const SPECIAL_QBLOCK_COLOR = 0xcc1414, SPECIAL_QBLOCK_FG = 0xffe9a8;
+const SPECIAL_QBLOCK_EMISSIVE = 0xff2a2a;
+const specialQBlockMat = new THREE.MeshStandardMaterial({ map:createQBlockTexture(SPECIAL_QBLOCK_COLOR, SPECIAL_QBLOCK_FG), metalness:0.6, roughness:0.15, emissive:SPECIAL_QBLOCK_EMISSIVE, emissiveIntensity:0.55 });
+const specialQBlockMatInverted = new THREE.MeshStandardMaterial({ map:createQBlockTexture(invertHex(SPECIAL_QBLOCK_COLOR), invertHex(SPECIAL_QBLOCK_FG)), metalness:0.6, roughness:0.15, emissive:invertHex(SPECIAL_QBLOCK_EMISSIVE), emissiveIntensity:0.55 });
 // 床に落とす影(共通の素材を全ブロックで共有し、ザ・ワールド中の反転も一括で行えるようにする)
 const qblockShadowGeo = new THREE.CircleGeometry(QBLOCK_SIZE*0.6, 32);
 const qblockShadowMat = new THREE.MeshBasicMaterial({ color:0x000000, transparent:true, opacity:0.3, depthWrite:false });
@@ -2083,13 +2102,15 @@ function createQBlockInstance(){
   scene.add(shadow);
   return { x:0, z:0, alive:false, special:false, mesh, shadow, bottomY:QBLOCK_BOTTOM_Y };
 }
-for (let i=0;i<QBLOCK_TARGET_COUNT;i++) qblocks.push(createQBlockInstance());
+// 第三部だけは、上記の密度から求まる標準個数(=第二部と同じ8個)に、さらに高所(地上50m)の3個を上乗せする
+const QBLOCK_PART3_EXTRA_COUNT = 3;
+for (let i=0;i<QBLOCK_TARGET_COUNT + QBLOCK_PART3_EXTRA_COUNT;i++) qblocks.push(createQBlockInstance());
 
-// 難易度ごとの物資ブロック配置数(第一部・第二部は少なめに絞り、第三部はプール全数=QBLOCK_TARGET_COUNTのまま)
+// 難易度ごとの物資ブロック配置数(第一部・第二部は少なめに絞り、第三部はプール全数=標準個数+3個)
 function qblockPlacementTarget(diff){
   if (vsMode) return VS_TOTAL_BLOCKS; // VS Modeは通常の第一部(4個)ではなく専用の7個を配置する
   if (diff === 1) return 4;
-  if (diff === 2) return 8;
+  if (diff === 2) return QBLOCK_TARGET_COUNT;
   return qblocks.length;
 }
 // ラスボスは、配置された物資ブロックを全て取得した瞬間に出現する(難易度共通)
@@ -2125,14 +2146,24 @@ function placeQBlocks(){
   }
   const target = qblockPlacementTarget(difficulty);
   let count = 0;
-  while (count < target && attempts < qblocks.length*50){
+  // ブロック同士の最低間隔。第三部のように標準個数より多く置く場合、この間隔のままでは物理的に入りきらないため、
+  // 一定回数試しても置けなくなったら間隔を2割ずつ緩めていく(下限あり)。こうすることで指定個数を確実に配置できる
+  let spacing = curQblockDensityRadius;
+  const SPACING_MIN = 60.0;
+  let attemptsAtSpacing = 0;
+  while (count < target && attempts < qblocks.length*200){
     attempts++;
+    attemptsAtSpacing++;
+    if (attemptsAtSpacing > 300 && spacing > SPACING_MIN){
+      spacing = Math.max(SPACING_MIN, spacing*0.8);
+      attemptsAtSpacing = 0;
+    }
     let x = (Math.random()*2-1)*curQblockAreaHalf;
     let z = (Math.random()*2-1)*curQblockAreaHalf;
     ({ x, z } = pushOutOfSlitGap(x, z)); // スリットの真上に来た場合は最寄りの盤面へ押し出す
     if (Math.hypot(x,z) < curQblockMinFromOrigin) continue;
     let ok = true;
-    for (const p of placed){ if (Math.hypot(x-p.x, z-p.z) < curQblockDensityRadius){ ok=false; break; } }
+    for (const p of placed){ if (Math.hypot(x-p.x, z-p.z) < spacing){ ok=false; break; } }
     if (!ok) continue;
     placed.push({x,z});
     const b = qblocks[count];
@@ -2143,9 +2174,11 @@ function placeQBlocks(){
     b.shadow.position.x = x; b.shadow.position.z = z;
     b.shadow.visible = true;
     count++;
+    attemptsAtSpacing = 0; // 1個置けたら、間隔を緩めるまでの猶予を数え直す
   }
   qblockTotalCount = count;
   qblocksCollected = 0;
+  specialQBlocksCollected = 0;
   // スペシャルブロックは配置時点では選ばない(初期状態では他と見分けが付かないようにする)。
   // 5個取得した時点で残っているブロックから1個選ぶ(詳細はrevealSpecialQBlock()を参照)
 }
@@ -2153,29 +2186,49 @@ function placeQBlocks(){
 // 第二部・第三部限定: 物資ブロックを5個取得した時点で、まだ残っている(未取得の)ブロックから1個をランダムに選び、
 // スペシャルブロックとして色を変える(取得するまでは見た目以外の変化はなく、実際に取得した瞬間に効果が発動する)
 const SPECIAL_QBLOCK_REVEAL_COUNT = 5;
+function markSpecialQBlock(b){
+  b.special = true;
+  b.mesh.material = theWorldActive ? specialQBlockMatInverted : specialQBlockMat;
+}
 function revealSpecialQBlock(){
   if (vsMode || difficulty === 1) return;
   const alive = qblocks.filter(b => b.alive);
   if (alive.length === 0) return;
-  const b = alive[Math.floor(Math.random()*alive.length)];
-  b.special = true;
-  b.mesh.material = theWorldActive ? specialQBlockMatInverted : specialQBlockMat;
+  markSpecialQBlock(alive[Math.floor(Math.random()*alive.length)]);
+}
+// 第三部限定: 最後の1個(残り1個になった時点で残っているブロック)を2個目のスペシャルブロックに変える。
+// これを取得すると銀玉が5個に増える(詳細はactivateSpecialBuff()を参照)
+function revealLastSpecialQBlock(){
+  if (vsMode || difficulty !== 3) return;
+  const alive = qblocks.filter(b => b.alive);
+  if (alive.length !== 1 || alive[0].special) return;
+  markSpecialQBlock(alive[0]);
 }
 
-// Lv.2限定: 生存中の？ブロックのうち3個をランダムに選び、単発ジャンプでは届かない高さまで引き上げる
-// (通常は底面20m。多段ジャンプで積み増した高度でないと届かない35mまで引き上げる)
+// 第二部・第三部限定: 生存中の？ブロックのうち3個をランダムに選び、単発ジャンプでは届かない高さまで引き上げる
+// (通常は底面20m。多段ジャンプで積み増した高度でないと届かない35mまで引き上げる)。
+// 第三部はさらに別の3個を地上50mまで引き上げ、より多くの多段ジャンプを要求する
 const QBLOCK_HIGH_COUNT = 3;
 const QBLOCK_HIGH_EXTRA_Y = 15.0;
+const QBLOCK_PART3_HIGH_BOTTOM_Y = 50.0; // 第三部の追加3個の底面高さ(地上50m)
+function raiseQBlock(b, bottomY){
+  b.bottomY = bottomY;
+  b.mesh.position.y = b.bottomY + QBLOCK_SIZE/2;
+}
 function applyLv2HighBlocks(){
   const alive = qblocks.filter(b => b.alive);
   for (let i=alive.length-1;i>0;i--){
     const j = Math.floor(Math.random()*(i+1));
     [alive[i], alive[j]] = [alive[j], alive[i]];
   }
-  for (let i=0;i<Math.min(QBLOCK_HIGH_COUNT, alive.length);i++){
-    const b = alive[i];
-    b.bottomY = QBLOCK_BOTTOM_Y + QBLOCK_HIGH_EXTRA_Y;
-    b.mesh.position.y = b.bottomY + QBLOCK_SIZE/2;
+  let idx = 0;
+  for (let i=0;i<QBLOCK_HIGH_COUNT && idx<alive.length;i++, idx++){
+    raiseQBlock(alive[idx], QBLOCK_BOTTOM_Y + QBLOCK_HIGH_EXTRA_Y);
+  }
+  if (!vsMode && difficulty === 3){
+    for (let i=0;i<QBLOCK_PART3_EXTRA_COUNT && idx<alive.length;i++, idx++){
+      raiseQBlock(alive[idx], QBLOCK_PART3_HIGH_BOTTOM_Y);
+    }
   }
 }
 
@@ -2191,8 +2244,12 @@ const BOSS_ANGULAR_SPEED = BOSS_SPEED / BOSS_ORBIT_RADIUS; // rad/s
 const BOSS_PHASE2_SIZE_MULT = 1.0;  // 1回目のヒット後もサイズは変更しない(以前は0.5倍に縮小していたが廃止)
 const BOSS_PHASE2_SPEED_MULT = 2.0; // 1回目のヒット後、速度がこの倍率になる
 const BOSS_PHASE2_Y_BOOST = 18.0;   // 1回目のヒット後、浮遊位置が地上からこの分だけ高くなる
+// 第三部限定のフェーズ3(2回目のヒット後)。さらにもう一段高く上がり、口レーザーの発射頻度が倍になる
+const BOSS_PHASE3_Y_BOOST = BOSS_PHASE2_Y_BOOST*2; // フェーズ2からさらに同じ幅だけ上昇する(合計2段ぶん)
+const BOSS_PHASE3_LASER_MULT = 2.0;                // 口レーザーの発射間隔がこの倍率ぶん短くなる(=頻度が倍)
 const BOSS_FLASH_TIME = 2.0;        // 1回目のヒット時のフラッシュ演出時間(秒)。この間は当たり判定を無効化する
 function currentBossY(){
+  if (bossPhase >= 3) return BOSS_Y + BOSS_PHASE3_Y_BOOST;
   return BOSS_Y + (bossPhase === 2 ? BOSS_PHASE2_Y_BOOST : 0);
 }
 const BOSS_APPEAR_BANNER_TIME = 4.0;
@@ -2282,10 +2339,21 @@ function hitBossPhase1(){
   playChargeSound();
   if (theWorldActive) deactivateTheWorld(); // 1回目のタッチ時にザ・ワールドが発動中だった場合は解除する
 }
-// ラスボスへのヒット処理の共通入口。第一部はフェーズ2が存在せず、1回目のヒットでそのまま撃破(クリア)になる
+// 第三部限定: 2回目のヒットでも撃破されず、さらに一段高く上がって口レーザーの頻度が倍になる第3形態へ移行する
+function hitBossPhase2(){
+  bossPhase = 3;
+  bossFlashTimer = 0;
+  playChargeSound();
+  if (theWorldActive) deactivateTheWorld();
+}
+// ラスボスへのヒット処理の共通入口。第一部はフェーズ2が存在せず1回目のヒットでそのまま撃破(クリア)、
+// 第二部は2回目、第三部は3回目のヒットで撃破になる
 function hitBoss(){
-  if (difficulty === 1 || bossPhase !== 1) triggerVictory();
-  else hitBossPhase1();
+  if (colonyDrop.active) return; // コロン落下中は結果が確定しているため、撃破扱いにはしない
+  if (difficulty === 1){ triggerVictory(); return; }
+  if (bossPhase === 1){ hitBossPhase1(); return; }
+  if (difficulty === 3 && bossPhase === 2){ hitBossPhase2(); return; }
+  triggerVictory();
 }
 
 function updateBossFlash(dt){
@@ -2346,9 +2414,10 @@ const BOSS_LASER_HIT_RADIUS = 6.0; // プレイヤーがこの水平距離以内
 let bossLaserTimer = 0;
 function updateBossLaser(dt){
   if (!bossActive || bossDefeatFalling || theWorldActive) return;
+  const interval = BOSS_LASER_INTERVAL / (bossPhase >= 3 ? BOSS_PHASE3_LASER_MULT : 1); // 第三部の第3形態は発射頻度が倍になる
   bossLaserTimer += dt;
-  if (bossLaserTimer < BOSS_LASER_INTERVAL) return;
-  bossLaserTimer -= BOSS_LASER_INTERVAL;
+  if (bossLaserTimer < interval) return;
+  bossLaserTimer -= interval;
   const bossHalf = BOSS_SIZE/2*bossSizeMult;
   const local = new THREE.Vector3(0, -bossHalf*0.4 - 3, -(bossHalf + 0.6)); // 中央からボスの全高(bossHalf*2)の20%ぶん下、さらに3m下、正面のすぐ外側
   local.applyAxisAngle(new THREE.Vector3(0,1,0), bossMesh.rotation.y);
@@ -2393,6 +2462,195 @@ function updateBossDefeatFall(dt){
     spawnExplosion(bossDefeatX, 0, bossDefeatZ, { count:24 }); // 最後は通常より派手な爆発にする
     playExplosionSound();
   }
+}
+
+// ============================================================
+// コロン落とし(全ステージ共通の制限時間)
+// ============================================================
+// 制限時間内にラスボスを撃破できなかった場合、上空から巨大な円筒「コロン」が斜めに降ってきてステージへ突き刺さり、
+// ドーム状の大爆発が広がってゲームオーバーになる。見た目はお菓子のコロン(ビスケット地+クリームの詰まった断面)で、
+// 落下角度・突き刺さり方は「コロニー落とし」のジオラマを参考にした
+const COLONY_TIME_LIMIT = 20.0;     // 秒。この時間までにラスボスを撃破できないと落ちてくる(演出の検証用に短くした暫定値。本来は100秒)
+const COLONY_FALL_TIME = 9.6;       // 上空から着弾するまでの時間(秒)。当初3.2秒だったが、じっくり見せるため1/3の速度に落とした
+const COLONY_BLAST_TIME = 2.2;      // 着弾後、ドーム状の爆発が広がりきるまでの時間(秒)
+const COLONY_WHITEOUT_HOLD = 0.35;  // 画面が真っ白になったまま保持する時間(秒)
+const COLONY_WHITEOUT_FADE = 1.4;   // 白から「背景だけの画」へ戻していく時間(秒)
+const COLONY_RADIUS = 90.0;         // 円筒の半径(m)
+const COLONY_LENGTH = 420.0;        // 円筒の長さ(m)
+const COLONY_START_Y = 1100.0;      // 落下開始高度(m)
+const COLONY_TILT = 42*D2R;         // 傾き(鉛直から何度倒すか)。斜めに突き刺さる見た目にする
+const COLONY_EMBED_DEPTH = 20.0;    // 先端が地面へ潜り込む深さ(m)。深く突き刺さらず、浅く刺さった状態で止める
+const COLONY_BLAST_RADIUS = 1500.0; // 最終的なドーム爆発の半径(m)
+// お菓子のコロンらしい見た目にするため、ビスケットの巻き模様を簡単な斜めストライプのテクスチャで表現する
+function createColonyTexture(){
+  const canvas = document.createElement('canvas');
+  canvas.width = 256; canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#d9a45c'; // 下地(焼いたビスケット色)
+  ctx.fillRect(0,0,256,256);
+  ctx.strokeStyle = 'rgba(150,95,35,0.55)';
+  ctx.lineWidth = 6;
+  for (let i=-256;i<512;i+=22){ // 巻き取った生地を思わせる斜めの筋
+    ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i+120, 256); ctx.stroke();
+  }
+  ctx.strokeStyle = 'rgba(255,225,180,0.35)';
+  ctx.lineWidth = 2;
+  for (let i=-256;i<512;i+=22){
+    ctx.beginPath(); ctx.moveTo(i+8, 0); ctx.lineTo(i+128, 256); ctx.stroke();
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(3, 6);
+  return tex;
+}
+const colonyGroup = new THREE.Group();
+{
+  const shellMat = new THREE.MeshStandardMaterial({ map:createColonyTexture(), roughness:0.85, metalness:0.05, side:THREE.DoubleSide });
+  const shell = new THREE.Mesh(new THREE.CylinderGeometry(COLONY_RADIUS, COLONY_RADIUS, COLONY_LENGTH, 40, 1, true), shellMat);
+  colonyGroup.add(shell);
+  // 筒の中に詰まったクリーム(断面から見える部分)。外側の筒よりわずかに短くして、両端が奥まって見えるようにする
+  const creamMat = new THREE.MeshStandardMaterial({ color:0xf6e4c4, roughness:0.6, metalness:0.0 });
+  const cream = new THREE.Mesh(new THREE.CylinderGeometry(COLONY_RADIUS*0.72, COLONY_RADIUS*0.72, COLONY_LENGTH*0.96, 32), creamMat);
+  colonyGroup.add(cream);
+}
+colonyGroup.visible = false;
+scene.add(colonyGroup);
+// 落下地点を予告する巨大な影。近づくほど濃く小さくなり、真上から迫っていることが分かるようにする
+const colonyShadowMat = new THREE.MeshBasicMaterial({ color:0x000000, transparent:true, opacity:0.0, depthWrite:false });
+const colonyShadowMesh = new THREE.Mesh(new THREE.CircleGeometry(1, 48), colonyShadowMat);
+colonyShadowMesh.rotation.x = -Math.PI/2;
+colonyShadowMesh.position.y = 0.05;
+colonyShadowMesh.visible = false;
+scene.add(colonyShadowMesh);
+// 着弾後に広がるドーム状の爆発(ドクロの爆風ドームと同じ作りで、半径だけ桁違いに大きくする)
+const colonyBlastMat = new THREE.MeshBasicMaterial({
+  color:0xff7b22, transparent:true, opacity:0, side:THREE.DoubleSide, depthWrite:false, blending:THREE.AdditiveBlending
+});
+const colonyBlastDome = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 16, 0, Math.PI*2, 0, Math.PI/2), colonyBlastMat);
+colonyBlastDome.visible = false;
+scene.add(colonyBlastDome);
+const colonyBannerEl = document.getElementById('colonyBanner');
+const colonyWhiteoutEl = document.getElementById('colonyWhiteout');
+const colonyDrop = { active:false, phase:'', timer:0, x:0, z:0 };
+
+// ホワイトアウト後は「ステージが消し飛んで背景(空)だけが残った」画にする。空・雲・ライト以外を一時的に隠し、
+// 何を隠したかを覚えておいて、難易度選択画面へ戻る際に元の表示状態へ戻す(個別の表示ロジックを壊さないため)
+let colonyHiddenObjects = [];
+function hideStageForColonyBlast(){
+  colonyHiddenObjects = [];
+  for (const obj of scene.children){
+    if (obj === sky || obj.isLight || clouds.indexOf(obj) !== -1) continue;
+    if (!obj.visible) continue; // もともと非表示のものは対象外(復元時に誤って表示させないため)
+    colonyHiddenObjects.push(obj);
+    obj.visible = false;
+  }
+}
+function restoreStageAfterColonyBlast(){
+  for (const obj of colonyHiddenObjects) obj.visible = true;
+  colonyHiddenObjects = [];
+}
+
+function resetColonyDrop(){
+  colonyDrop.active = false;
+  colonyDrop.phase = '';
+  colonyDrop.timer = 0;
+  restoreStageAfterColonyBlast();
+  colonyGroup.visible = false;
+  colonyShadowMesh.visible = false;
+  colonyBlastDome.visible = false;
+  colonyBannerEl.style.display = 'none';
+  colonyWhiteoutEl.style.display = 'none';
+  colonyWhiteoutEl.style.opacity = '0';
+}
+function startColonyDrop(){
+  if (colonyDrop.active) return;
+  colonyDrop.active = true;
+  colonyDrop.phase = 'falling';
+  colonyDrop.timer = 0;
+  // 落下地点はその瞬間のプレイヤーの真上(「退避が間に合わない」の通り、逃げ場はない)。
+  // 迫ってくる様子が画面に映るよう、離れた中央ではなく自機の頭上に落とす。盤外・スリットの上には落とさない
+  let dx = clamp(pos.x, -curGroundHalf*0.85, curGroundHalf*0.85);
+  let dz = clamp(pos.z, -curGroundHalf*0.85, curGroundHalf*0.85);
+  ({ x:dx, z:dz } = pushOutOfSlitGap(dx, dz));
+  colonyDrop.x = dx; colonyDrop.z = dz;
+  colonyGroup.rotation.set(0, Math.random()*Math.PI*2, COLONY_TILT);
+  colonyGroup.visible = true;
+  colonyShadowMesh.position.set(colonyDrop.x, 0.05, colonyDrop.z);
+  colonyShadowMesh.visible = true;
+  colonyBannerEl.style.display = 'block';
+  speakWarning(); // 「コッチヲミロー!」の読み上げを流用した警告(音ありの場合のみ鳴る)
+}
+// 落下中〜爆発中は通常の追従カメラを止め、落下地点を斜め横から捉える演出用のカメラワークに切り替える
+// (真上から落ちてくるため、通常の背面視点のままではコロンが画面に映らない)
+function updateColonyCamera(){
+  const cp = colonyGroup.position;
+  // 全長420m・直径180mの巨大な物体のため、十分に離れた位置から見上げないと画面に収まらない
+  const ux = Math.sin(camYaw), uz = Math.cos(camYaw); // 直前まで見ていた向きを基準に、落下地点の手前へ回り込む
+  camera.position.set(colonyDrop.x + ux*900, 260, colonyDrop.z + uz*900);
+  const aimY = colonyDrop.phase === 'falling' ? Math.min(cp.y*0.45, 260) : 120; // 落下中は高いところ、着弾後は地表付近を見る
+  camera.lookAt(colonyDrop.x, aimY, colonyDrop.z);
+}
+function updateColonyDrop(dt){
+  if (!colonyDrop.active) return;
+  colonyDrop.timer += dt;
+  if (colonyDrop.phase === 'falling'){
+    const f = clamp(colonyDrop.timer/COLONY_FALL_TIME, 0, 1);
+    const eased = f*f; // 重力で加速していくように、終盤ほど速く落ちる
+    // 傾けた円筒の中心。着弾時は先端がCOLONY_EMBED_DEPTHぶんだけ地面へ潜り込んだ位置で止める(浅く突き刺さる)
+    const endY = Math.cos(COLONY_TILT)*COLONY_LENGTH/2 - COLONY_EMBED_DEPTH;
+    const y = COLONY_START_Y + (endY - COLONY_START_Y)*eased;
+    colonyGroup.position.set(colonyDrop.x, y, colonyDrop.z);
+    colonyGroup.rotation.y += dt*0.35; // ゆっくり回りながら落ちてくる
+    // 落下地点の影。高いうちは薄く大きく、近づくほど濃く小さくなる(真上から迫っていることを地面側でも伝える)
+    const shadowScale = COLONY_RADIUS*(2.6 - 1.4*eased);
+    colonyShadowMesh.scale.set(shadowScale, shadowScale, 1);
+    colonyShadowMat.opacity = 0.12 + 0.5*eased;
+    if (f >= 1){
+      colonyDrop.phase = 'blast';
+      colonyDrop.timer = 0;
+      colonyShadowMesh.visible = false;
+      colonyBannerEl.style.display = 'none';
+      colonyBlastDome.position.set(colonyDrop.x, 0, colonyDrop.z);
+      colonyBlastDome.visible = true;
+      playExplosionSound();
+      // 着弾地点まわりに爆発と土煙をまとめて発生させる
+      for (let i=0;i<14;i++){
+        const a = Math.random()*Math.PI*2, r = Math.random()*COLONY_RADIUS*2.2;
+        spawnExplosion(colonyDrop.x+Math.cos(a)*r, Math.random()*40, colonyDrop.z+Math.sin(a)*r, { count:20 });
+      }
+      // プレイヤーもここで爆散させる(ドクロの直撃でGAME OVERになる場合と同じ見せ方に揃える)
+      characterRoot.visible = false;
+      spawnPlayerShatter(pos.x, airY + cur.hipY + TORSO_H*0.5, pos.z);
+      stopThrusterSound();
+    }
+  } else if (colonyDrop.phase === 'blast'){
+    // 突き刺さったコロンはそのまま残し、ドーム状の爆発だけが画面全体へ広がっていく
+    const f = clamp(colonyDrop.timer/COLONY_BLAST_TIME, 0, 1);
+    const r = COLONY_BLAST_RADIUS*(0.04 + 0.96*Math.sqrt(f)); // 最初は一気に、後半はゆっくり広がる
+    colonyBlastDome.scale.set(r, r, r);
+    colonyBlastMat.opacity = 0.55 + 0.45*f; // 消えていくのではなく、逆に濃くなって画面を覆い尽くす
+    // 後半にかけて画面を白く飛ばしていく(ドームがカメラを飲み込むタイミングに合わせる)
+    colonyWhiteoutEl.style.display = 'block';
+    colonyWhiteoutEl.style.opacity = String(clamp((f-0.5)/0.5, 0, 1));
+    if (f >= 1){
+      colonyDrop.phase = 'whiteout';
+      colonyDrop.timer = 0;
+      colonyWhiteoutEl.style.opacity = '1';
+      hideStageForColonyBlast(); // 真っ白な間にステージ・自機・コロンをすべて消し、背景(空)だけの状態にしておく
+    }
+  } else if (colonyDrop.phase === 'whiteout'){
+    // 真っ白なまま少し保持したあと、ゆっくり白を引いて「背景だけが残った」画を見せる
+    if (colonyDrop.timer >= COLONY_WHITEOUT_HOLD){
+      const f = clamp((colonyDrop.timer - COLONY_WHITEOUT_HOLD)/COLONY_WHITEOUT_FADE, 0, 1);
+      colonyWhiteoutEl.style.opacity = String(1-f);
+      if (f >= 1){
+        colonyDrop.phase = 'done';
+        colonyWhiteoutEl.style.display = 'none';
+        if (!gameOver) finishGame(false);
+      }
+    }
+  }
+  if (colonyDrop.phase === 'falling' || colonyDrop.phase === 'blast' || colonyDrop.phase === 'whiteout') updateColonyCamera();
 }
 
 let victoryPoseIndex = 0; // クリア演出のジョジョ立ちポーズ番号(triggerVictory()のたびに3種類からランダムに選び直す)
@@ -2989,6 +3247,7 @@ let form2Timer = 0;
 let form2Infinite = false; // 全？ブロック取得後はtrueになり、フォーム2の時間経過による自動解除を行わない(ドクロに当たった場合のみフォーム1に戻る)
 let qblockTotalCount = 0; // このプレイで実際に配置された？ブロックの総数
 let qblocksCollected = 0; // このプレイで取得済みの？ブロック数
+let specialQBlocksCollected = 0; // このプレイで取得済みのスペシャルブロック数(2個目で銀玉が5個に増える)
 
 // ライフ制(ダメージ制)
 const PLAYER_MAX_LIFE = 5;
@@ -4372,6 +4631,7 @@ function resetGame(){
 
   bossActive = false;
   bossDefeatFalling = false; // 撃破後の落下演出の途中でリセットされた場合に備える
+  resetColonyDrop(); // コロン落としの演出中にリセットされた場合に備える
   bossMesh.visible = false;
   bossMesh.scale.set(1,1,1);
   bossShadowMesh.visible = false;
@@ -4505,7 +4765,8 @@ function pressJojo(){
     }
   }
 
-  // ラスボスブロックの撃破判定(タッチではなくジョジョ立ちのヒットで撃破。1回目・2回目とも同じ判定)
+  // ラスボスブロックの撃破判定(タッチではなくジョジョ立ちのヒットで撃破。何回目のヒットでも判定は同じで、
+  // 何回当てれば撃破になるかだけが難易度で変わる(第一部1回・第二部2回・第三部3回。詳細はhitBoss()を参照))
   if (bossActive && bossFlashTimer < 0){
     const bd = Math.hypot(bossX-center.x, currentBossY()-center.y, bossZ-center.z);
     if (bd <= currentJojoRange()){
@@ -6289,7 +6550,10 @@ function updateQBlock(dt){
     b.shadow.visible = false;
     triggerForm2();
     if (b.special){
-      activateSpecialBuff(); // スペシャルブロック限定:銀玉3個が周囲の敵ザク・ドクロをレーザーで自動撃破する(時間制限なし、被弾で1個ずつ減る)
+      // スペシャルブロック限定:銀玉が周囲の敵ザク・ドクロをレーザーで自動撃破する(時間制限なし、被弾で1個ずつ減る)。
+      // 2個目(第三部の最後の物資)を取得した場合は銀玉が5個に増える
+      specialQBlocksCollected++;
+      activateSpecialBuff(specialQBlocksCollected >= 2 ? SPECIAL_BUFF_ORB_COUNT_2ND : SPECIAL_BUFF_ORB_COUNT);
       if (!vsMode) awardTrophy('silver_orb');
     }
     if (vsMode){
@@ -6299,6 +6563,7 @@ function updateQBlock(dt){
     qblocksCollected++;
     if (qblocksCollected === 1 && !jojoUnlocked){ jojoUnlocked = true; updateJojoButtonState(); } // 1個目の取得でジョジョ立ちを解禁する(ドクロもこのタイミングでupdateEnemy側から出現し始める)
     if (qblocksCollected === SPECIAL_QBLOCK_REVEAL_COUNT) revealSpecialQBlock(); // 第二部・第三部限定(内部でdifficultyを判定)
+    if (qblocksCollected === qblockTotalCount - 1) revealLastSpecialQBlock(); // 第三部限定: 残り1個になったら、それを2個目のスペシャルブロックに変える
     // 6個目以降の取得毎に敵ザクの出現頻度を倍にする(第一部はそもそも敵ザクが出現しないため実質無関係)。
     // 終盤(スペシャルブロックの銀玉で凌ぐことを想定した)難易度上昇
     if (qblocksCollected >= ZAKU_FREQ_RAMP_START_COUNT) zakuSpawnFreqMult *= 2;
@@ -6320,7 +6585,9 @@ function updateQBlock(dt){
 
 // ---- スペシャルブロックの効果:銀玉3個が機体の周りを回転し、1秒おきに周囲の敵ザク・ドクロを自動撃破する ----
 // 時間制限は無く、取得後はずっと有効。ただしダメージを受けるたびに銀玉が1個ずつ失われ、0個になった時点で効果終了する
-const SPECIAL_BUFF_ORB_COUNT = 3;
+const SPECIAL_BUFF_ORB_COUNT = 3;      // 1個目のスペシャルブロックで出る銀玉の数
+const SPECIAL_BUFF_ORB_COUNT_2ND = 5;  // 第三部の2個目(最後の物資)のスペシャルブロックで出る銀玉の数
+const SPECIAL_BUFF_ORB_MAX = SPECIAL_BUFF_ORB_COUNT_2ND; // 用意しておく銀玉メッシュの数
 const SPECIAL_BUFF_LASER_INTERVAL = 1.0;
 const SPECIAL_BUFF_RANGE = 60.0;        // この水平距離以内の敵ザク・ドクロだけを対象にする(当初40m→80mに拡大した後、60mに調整)
 const SPECIAL_BUFF_ORB_RADIUS = 0.8;    // 直径を当初の半分にした値
@@ -6337,22 +6604,24 @@ const specialBuffOrbMat = new THREE.MeshStandardMaterial({ color:0x8c8f94, metal
 const specialBuff = {
   orbs: [],
   active: false,
-  orbCount: 0,   // 残っている銀玉の数(0〜SPECIAL_BUFF_ORB_COUNT)。0になった瞬間に効果終了する
+  orbCount: 0,   // 残っている銀玉の数(0〜SPECIAL_BUFF_ORB_MAX)。0になった瞬間に効果終了する
   laserTimer: 0,
   orbitAngle: 0
 };
-for (let i=0;i<SPECIAL_BUFF_ORB_COUNT;i++){
+for (let i=0;i<SPECIAL_BUFF_ORB_MAX;i++){
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(SPECIAL_BUFF_ORB_RADIUS, 16, 12), specialBuffOrbMat);
   mesh.visible = false;
   scene.add(mesh);
   specialBuff.orbs.push(mesh);
 }
 function updateSpecialBuffOrbVisibility(){
-  for (let i=0;i<SPECIAL_BUFF_ORB_COUNT;i++) specialBuff.orbs[i].visible = i < specialBuff.orbCount;
+  for (let i=0;i<SPECIAL_BUFF_ORB_MAX;i++) specialBuff.orbs[i].visible = i < specialBuff.orbCount;
 }
-function activateSpecialBuff(){
+// count省略時は1個目のスペシャルブロックと同じ3個。2個目(第三部の最後の物資)を取得した場合は5個で呼ばれる。
+// 既に発動中に取得した場合も、その時点の残数に関わらず新しい個数へ置き換える(取り直しで満タンに戻る扱い)
+function activateSpecialBuff(count){
   specialBuff.active = true;
-  specialBuff.orbCount = SPECIAL_BUFF_ORB_COUNT;
+  specialBuff.orbCount = Math.min(SPECIAL_BUFF_ORB_MAX, count || SPECIAL_BUFF_ORB_COUNT);
   specialBuff.laserTimer = 0;
   specialBuff.orbitAngle = 0;
   updateSpecialBuffOrbVisibility();
@@ -6413,8 +6682,9 @@ function updateSpecialBuff(dt){
   }
   specialBuff.orbitAngle += SPECIAL_BUFF_ORBIT_SPEED*dt;
   const cy = airY + SPECIAL_BUFF_ORBIT_HEIGHT;
-  for (let i=0;i<SPECIAL_BUFF_ORB_COUNT;i++){
-    const angle = specialBuff.orbitAngle + i*(Math.PI*2/SPECIAL_BUFF_ORB_COUNT);
+  const orbCount = Math.max(1, specialBuff.orbCount); // 残っている銀玉の数で等間隔に配置する(被弾で減ると自然に並び直る)
+  for (let i=0;i<orbCount;i++){
+    const angle = specialBuff.orbitAngle + i*(Math.PI*2/orbCount);
     // 単調な円軌道にならないよう、半径・高さともサイン波で緩くゆらす(球体ごとに位相をずらして揃って動かないようにする)
     const wobbleR = Math.sin(specialBuff.orbitAngle*SPECIAL_BUFF_WOBBLE_R_FREQ + i*2.1) * SPECIAL_BUFF_WOBBLE_R_AMP;
     const wobbleY = Math.sin(specialBuff.orbitAngle*SPECIAL_BUFF_WOBBLE_Y_FREQ + i*1.7) * SPECIAL_BUFF_WOBBLE_Y_AMP;
@@ -6465,7 +6735,7 @@ function currentTheWorldDuration(){
   // VS Modeはフォームによらず双方5秒固定にする(指示通り。THE_WORLD_FREEZE_TIMEと同じ値のためそのまま返す)
   if (vsMode) return THE_WORLD_FREEZE_TIME;
   // ラスボスがフェーズ2(1回目のタッチ後)の間は最優先で20秒になる
-  if (bossActive && bossPhase === 2) return THE_WORLD_FREEZE_TIME_BOSS;
+  if (bossActive && bossPhase >= 2) return THE_WORLD_FREEZE_TIME_BOSS; // 第三部の第3形態も同じ扱いにする
   // フォーム2中(発動時だけでなく発動中にフォーム2へ変身した場合も)は継続時間が伸びる
   return playerForm === 2 ? THE_WORLD_FREEZE_TIME_FORM2 : THE_WORLD_FREEZE_TIME;
 }
@@ -7367,6 +7637,8 @@ function loop(now){
     updateBossCollision(); // ボスへの体当たり判定(すり抜け防止)
     updateBossLaser(dt); // ボスの口からの真下レーザー攻撃
     updateBossDefeatFall(dt); // ラスボス撃破後、煙を出しながら落下→爆発する演出(state==='victory'の間も進める必要がある)
+    // 制限時間内にラスボスを撃破できなかった場合の「コロン落とし」(全ステージ共通。VS Modeは対象外)
+    if (!vsMode && !colonyDrop.active && state !== 'victory' && !bossDefeatFalling && elapsedTime >= COLONY_TIME_LIMIT) startColonyDrop();
     updateRadar();
     updateCpu(dt); // VS Mode専用(vsMode===falseなら内部で即return)
     updateVsMatchTimer(dt); // VS Modeの制限時間(100秒)判定
@@ -7397,6 +7669,8 @@ function loop(now){
     updateLaserBeams(dt);
     updateJojoDome(dt);
     updateSkullBlast(dt);
+    // コロン落としの落下〜爆発は、途中で別の要因のGAME OVERが発生しても最後まで見せたいため、ここで進める
+    updateColonyDrop(dt);
     updateTrophyToast(dt);
     updateVsAnnounceToast(dt);
     updateBossAppearBanner(dt);
@@ -7407,7 +7681,8 @@ function loop(now){
   }
   // 一時停止中もカメラの視点操作(ドラッグ・ズーム)だけは反映する(難易度選択・GAME OVER画面では従来どおり更新しない)
   // ダイジェスト再生中はupdateDigestPlayback内で専用のカメラワークを適用済みのため、ここでは呼ばない
-  if (!digestPlaybackActive && !gameOver && !awaitingDifficulty) updateCamera(dt);
+  // コロン落としの演出中は、updateColonyDrop内の専用カメラワークを適用済みのため通常の追従カメラは動かさない
+  if (!digestPlaybackActive && !colonyDrop.active && !gameOver && !awaitingDifficulty) updateCamera(dt);
   if (!digestPlaybackActive && !gameOver && !awaitingDifficulty) updateQBlockTargeting();
   else { qblockReticleEls.forEach(el => { el.style.display = 'none'; }); offscreenTargetEl.style.display = 'none'; }
 
