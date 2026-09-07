@@ -228,6 +228,11 @@
     font-size:clamp(12px,3.4vw,15px); color:#9fd6ff; text-decoration:underline; cursor:pointer;
   }
   #usageLink:hover { color:#ffffff; }
+  #demoSleepNote {
+    display:none; margin-top:clamp(14px,3.8vw,22px);
+    font-family: -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+    font-size:clamp(11px,3vw,13px); color:#bbb; opacity:0.8;
+  }
   #rankingBtn {
     display:inline-block; margin-top:clamp(8px,2.4vw,12px);
     font-family: -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
@@ -624,6 +629,7 @@
   <br>
   <button type="button" id="settingsBtn">⚙️ 設定</button>
   <button type="button" id="rankingBtn">🏆 ランキングを見る</button>
+  <div id="demoSleepNote">🔋 長時間操作がなかったため自動再生を停止しました(画面に触れると再開します)</div>
   <div class="credit">Designed by やっさん / Programed by Claude Code</div>
 </div>
 
@@ -3314,6 +3320,7 @@ function buildOwnedTrophiesHTML(){
   return '<div class="trophyGrid">' + ids.map(id => '<div class="trophyRow">👴🏾🏆 '+escapeHtml(TROPHIES[id])+'</div>').join('') + '</div>';
 }
 function openRankingOverlay(){
+  markUserActive();
   closeSettingsOverlay(); // 設定オーバーレイと同時に開かないようにする
   document.getElementById('rankingListLv1').innerHTML = buildRankingColumnHTML(1);
   document.getElementById('rankingListLv2').innerHTML = buildRankingColumnHTML(2);
@@ -3334,6 +3341,7 @@ function closeRankingOverlay(){
 }
 // ---- 設定オーバーレイ(チュートリアル・視点自動回転のチェックボックスをまとめた画面。今後もオプションを追加していく想定) ----
 function openSettingsOverlay(){
+  markUserActive();
   closeRankingOverlay(); // ランキングオーバーレイと同時に開かないようにする
   settingsOverlayOpen = true;
   settingsOverlayEl.style.display = 'flex';
@@ -3629,6 +3637,20 @@ let demoDiffNext = 1;
 let rankingOverlayOpen = false; // ランキングオーバーレイ表示中はタイトル画面の自動デモ開始タイマーを止める
 let settingsOverlayOpen = false; // 設定オーバーレイ表示中も同様にタイマー・ゲーム開始キーを止める
 const demoLabelEl = document.getElementById('demoLabel');
+// スマホ放置によるバッテリー消耗を防ぐため、実際の操作が一定時間ないまま自動デモが流れ続けたら自動再生を止める。
+// デモが何度も繰り返し起動・終了しても、この間ずっと本当に無操作なら合計時間として積み上がり続ける(1回のデモの長さでは判定しない)
+const DEMO_AUTOPLAY_LIMIT = 600.0; // 秒(10分)。この間ずっと無操作が続いたら自動再生を停止する
+let totalUnattendedTime = 0;
+let demoAutoplaySuspended = false; // 無操作タイムアウトにより自動デモを止めた状態(何か操作すると解除される)
+const demoSleepNoteEl = document.getElementById('demoSleepNote');
+// 実際にユーザーが操作した瞬間に呼ぶ。無操作の積算時間をリセットし、自動デモの停止状態も解除する
+function markUserActive(){
+  totalUnattendedTime = 0;
+  if (demoAutoplaySuspended){
+    demoAutoplaySuspended = false;
+    demoSleepNoteEl.style.display = 'none';
+  }
+}
 const DEMO_ZOOM_PERIOD = 35.0; // 秒。ズーム最大⇔最小を1往復する周期(体感5倍ゆっくりに調整)
 const demoAI = { moveTimer:0, jumpTimer:0, jojoTimer:0, zoomT:0, blocksSeekDone:false };
 let demoCameraCycleIndex = 0; // 0,1: 固定視点 / 2: 自動回転、を繰り返す(ランダムだと偏って見えることがあるため、3回に2回・1回を確定で保証する)
@@ -3652,7 +3674,22 @@ function startDemo(){
   showDemoRanking();
 }
 function cancelDemo(){
+  markUserActive(); // 実際の操作でデモが中断された = ユーザーがいる証拠なので、無操作の積算時間をリセットする
   resetGame(); // resetGame内でdemoActiveをfalseに戻し、タイトル画面(難易度選択)を再表示する
+}
+// 本当に無操作(デモが何度も自動で繰り返し起動・終了しているだけ)の時間がDEMO_AUTOPLAY_LIMITに達したら、
+// スマホを放置したままの電池消耗を防ぐため自動デモを止める。markUserActive()はここでは呼ばない(呼ぶと積算時間が消えてしまうため)
+function suspendDemoForBattery(){
+  demoAutoplaySuspended = true;
+  demoSleepNoteEl.style.display = 'block';
+  if (demoActive) resetGame(); // タイトル画面(難易度選択)に戻して停止させる。再開は何か操作した瞬間(markUserActive())
+}
+function updateDemoAutoplayWatchdog(dt){
+  if (demoAutoplaySuspended) return;
+  if (demoActive || (awaitingDifficulty && !rankingOverlayOpen && !settingsOverlayOpen)){
+    totalUnattendedTime += dt;
+    if (totalUnattendedTime >= DEMO_AUTOPLAY_LIMIT) suspendDemoForBattery();
+  }
 }
 // デモ開始直後、まだ2個目の物資ブロックを取っていない間だけ、最も近い生存中のブロックへまっすぐ向かう
 // (第二部・第三部で敵ザク・ハロが出現するのは2個目取得後のため、デモでも敵ザクが映るように2個目まで確実に取りに行かせる。
@@ -4168,7 +4205,7 @@ function startGame(diff, invincible, vs){
   document.body.classList.toggle('vs-mode', vsMode); // PC操作説明を右下に移動する等、VS Mode専用のCSSレイアウトに切り替える
   startBGM();
 }
-function startVsModeGame(){ startGame(1, false, true); } // 難易度選択画面のVS Modeボタン/4キーから呼ばれる(無敵モードの長押し判定は無し)
+function startVsModeGame(){ markUserActive(); startGame(1, false, true); } // 難易度選択画面のVS Modeボタン/4キーから呼ばれる(無敵モードの長押し判定は無し)
 
 function resetGame(){
   stopBGM();
@@ -4690,9 +4727,9 @@ document.getElementById('diffBtnVs').addEventListener('touchstart', (e)=>{ e.pre
 document.getElementById('diffBtnVs').addEventListener('click', (e)=>{ ensureAudio(); if (awaitingDifficulty) startVsModeGame(); });
 
 // 難易度選択画面をチェックボックス操作等でいじっている間は、自動デモの開始タイマーをリセットしておく
-difficultyEl.addEventListener('touchstart', ()=>{ titleIdleTimer = 0; }, { passive:true });
-difficultyEl.addEventListener('mousedown', ()=>{ titleIdleTimer = 0; });
-difficultyEl.addEventListener('change', ()=>{ titleIdleTimer = 0; });
+difficultyEl.addEventListener('touchstart', ()=>{ titleIdleTimer = 0; markUserActive(); }, { passive:true });
+difficultyEl.addEventListener('mousedown', ()=>{ titleIdleTimer = 0; markUserActive(); });
+difficultyEl.addEventListener('change', ()=>{ titleIdleTimer = 0; markUserActive(); });
 
 // ランキング(この端末のローカル記録)。タイトル画面のボタンから開閉する
 const rankingBtnEl = document.getElementById('rankingBtn');
@@ -4943,6 +4980,7 @@ function gpNavButtons(){
 function gpMoveFocus(dir){
   const btns = gpNavButtons();
   if (btns.length === 0) return;
+  markUserActive();
   const idx = btns.indexOf(document.activeElement);
   const next = (idx < 0) ? 0 : (idx + dir + btns.length) % btns.length;
   btns[next].focus();
@@ -4952,6 +4990,7 @@ function gpMoveFocus(dir){
 // 決定操作(常に即時決定、長押し判定なし)は、ボタンIDから直接どの難易度かを判断してstartGame()を呼ぶ
 function activateDiffButton(el){
   if (!el || !awaitingDifficulty) return;
+  markUserActive(); // キーボード/PCコントローラーでの決定はDOMのクリック/タッチイベントを経由しないため、ここで明示的に記録する
   if (el.id === 'diffBtnVs'){ if (vsModeUnlocked) startVsModeGame(); return; }
   const m = el.id.match(/^diffBtn(\d)$/);
   if (m) startGame(Number(m[1]), false);
@@ -7183,11 +7222,13 @@ function loop(now){
   if (awaitingDifficulty && !rankingOverlayOpen && !settingsOverlayOpen){
     if (diffPressActive){
       titleIdleTimer = 0; // 無敵モード判定の長押し中は自動デモの開始タイマーを進めない(離すと通常通りゼロから再開する)
+      markUserActive();
     } else {
       titleIdleTimer += dt;
-      if (titleIdleTimer >= TITLE_DEMO_IDLE) startDemo();
+      if (titleIdleTimer >= TITLE_DEMO_IDLE && !demoAutoplaySuspended) startDemo();
     }
   }
+  updateDemoAutoplayWatchdog(dt);
   updatePart2TeaseBanner(dt);
   updateDemoRankingToggle(dt);
   if (digestPlaybackActive){
