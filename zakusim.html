@@ -339,9 +339,9 @@
   #stick8.active #stickKnob { background:rgba(140,140,140,0.8); }
   #actionButtons {
     position:fixed; right:22px; bottom:calc(26px + env(safe-area-inset-bottom));
-    z-index:15; flex-direction:row; align-items:flex-start; gap:14px;
+    z-index:15; flex-direction:row; align-items:center; gap:14px;
   }
-  /* ジョジョ・ザ・世界は縦に並べた列のまま、JUMPだけをその左側(ジョジョとほぼ同じ高さ)に離して配置する */
+  /* ジョジョ・ザ・世界は縦に並べた列のまま、JUMPだけをその左側、ちょうど中間の高さに離して配置し三角形になるようにする */
   #poseButtons { display:flex; flex-direction:column; align-items:flex-end; gap:14px; }
   .actbtn {
     width:64px; height:64px; border-radius:50%;
@@ -404,6 +404,16 @@
     max-width:88vw;
   }
   #trophyToast .name { display:block; font-size:15px; font-weight:normal; margin-top:3px; white-space:normal; }
+  /* スマホでは中央上部だと自機モデルやチュートリアルヒントと重なって邪魔になるため、バーチャルスティック・操作ボタンより
+     上の右寄りの空間へ小さめに表示する。本体側のtop:190pxを打ち消すため、あえて#trophyToast定義より後ろに置く
+     (同じ詳細度なので後勝ちになる) */
+  @media (pointer:coarse){
+    #trophyToast {
+      top:auto; bottom:calc(210px + env(safe-area-inset-bottom)); left:auto; right:calc(20px + env(safe-area-inset-right));
+      transform:none; font-size:8px; padding:4px 8px; max-width:52vw;
+    }
+    #trophyToast .name { font-size:7px; }
+  }
   /* VS Mode専用の告知トースト(「残り1個!」等)。トロフィートーストと同じ見た目を流用する */
   #vsAnnounceToast {
     display:none; position:fixed; top:190px; left:50%; transform:translateX(-50%); z-index:13;
@@ -3592,14 +3602,14 @@ let rankingOverlayOpen = false; // ランキングオーバーレイ表示中は
 let settingsOverlayOpen = false; // 設定オーバーレイ表示中も同様にタイマー・ゲーム開始キーを止める
 const demoLabelEl = document.getElementById('demoLabel');
 const DEMO_ZOOM_PERIOD = 35.0; // 秒。ズーム最大⇔最小を1往復する周期(体感5倍ゆっくりに調整)
-const demoAI = { moveTimer:0, jumpTimer:0, jojoTimer:0, zoomT:0, wentForFirstBlock:false };
+const demoAI = { moveTimer:0, jumpTimer:0, jojoTimer:0, zoomT:0, blocksSeekDone:false };
 let demoCameraCycleIndex = 0; // 0,1: 固定視点 / 2: 自動回転、を繰り返す(ランダムだと偏って見えることがあるため、3回に2回・1回を確定で保証する)
 function startDemo(){
   startGame(demoDiffNext, false);
   // 第三部解禁後は第一部→第二部→第三部の順で3種類を巡回する(解禁前は従来通り第一部・第二部の交互)
   demoDiffNext = part3Unlocked ? (demoDiffNext % 3) + 1 : (demoDiffNext === 1 ? 2 : 1);
   demoActive = true;
-  demoAI.wentForFirstBlock = false;
+  demoAI.blocksSeekDone = false;
   // チュートリアルはstartGame()側の判定(第一部かつチェックON)をそのまま活かし、デモ中も表示する
   // (以前は明示的に無効化していたが、その場合でもstartGame()内でメッセージ0のpaused=trueは既に発生済みで、
   //  デモのAI入力は本物のキー/タッチ/ゲームパッドのイベントを経由しないため一時停止が解除されず、
@@ -3616,9 +3626,10 @@ function startDemo(){
 function cancelDemo(){
   resetGame(); // resetGame内でdemoActiveをfalseに戻し、タイトル画面(難易度選択)を再表示する
 }
-// デモ開始直後、まだ1個も物資ブロックを取っていない間だけ、最も近い生存中のブロックへまっすぐ向かう
-// (カメラ基準の移動系なので、moveRefYawを基準にした角度差から一番近い移動キーの組み合わせを選ぶ)
-function demoSteerTowardFirstBlock(){
+// デモ開始直後、まだ2個目の物資ブロックを取っていない間だけ、最も近い生存中のブロックへまっすぐ向かう
+// (第二部・第三部で敵ザク・ハロが出現するのは2個目取得後のため、デモでも敵ザクが映るように2個目まで確実に取りに行かせる。
+//  カメラ基準の移動系なので、moveRefYawを基準にした角度差から一番近い移動キーの組み合わせを選ぶ)
+function demoSteerTowardNearestBlock(){
   const nearest = findNearestAliveBlock(pos.x, pos.z);
   ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].forEach(releaseMoveKey);
   if (!nearest) return;
@@ -3633,16 +3644,28 @@ function demoSteerTowardFirstBlock(){
   else pressMoveKey('ArrowRight');
 }
 
+// デモAI用: 進行方向の少し先がスリット(裂け目)の上に差し掛かっていたら、地上にいるうちに強制的にジャンプを仕込む。
+// ジャンプの溜め動作(CROUCH_TIME)中も地上判定のままスリット落下判定が効くため、実際に穴へ到達するより十分手前(15m)で
+// 仕掛けることで、溜め→空中遷移が完了してから穴の上を通過できるようにする
+const DEMO_SLIT_JUMP_LOOKAHEAD = 15.0;
+function demoAvoidSlitFall(){
+  if (!slitEnabled || inAir || state === 'jumpCharge') return;
+  const aheadX = pos.x + (-Math.sin(yaw))*DEMO_SLIT_JUMP_LOOKAHEAD;
+  const aheadZ = pos.z + (-Math.cos(yaw))*DEMO_SLIT_JUMP_LOOKAHEAD;
+  if (isOverSlit(aheadX, aheadZ)) pressJump();
+}
+
 // 下手なAIの入力(方向キーはランダムに切り替え、ジャンプ・ジョジョ立ちも時々押すだけの単純な挙動)
 function updateDemoAI(dt){
   // ハロに接触してザ・世界が使用可能になったら、すぐ発動する(通常のランダム挙動より優先)
   if (theWorldCharged) pressTetsuzanko();
+  demoAvoidSlitFall(); // ランダム移動・ブロック直行のどちらの局面でもスリット転落だけは常に回避する
 
-  if (!demoAI.wentForFirstBlock){
-    if (qblocksCollected >= 1){
-      demoAI.wentForFirstBlock = true; // 以後は下記の通常のランダム移動に戻る
+  if (!demoAI.blocksSeekDone){
+    if (qblocksCollected >= 2){
+      demoAI.blocksSeekDone = true; // 以後は下記の通常のランダム移動に戻る
     } else {
-      demoSteerTowardFirstBlock();
+      demoSteerTowardNearestBlock();
       demoAI.jumpTimer -= dt;
       if (demoAI.jumpTimer <= 0){
         pressJump();
