@@ -254,6 +254,7 @@
     font-size:16px; padding:6px 10px; border-radius:6px; border:2px solid rgba(125,220,255,0.65);
     background:rgba(255,255,255,0.92); color:#222; width:150px; text-align:center;
   }
+  #goNameEntry .nameNote { width:100%; font-size:11px; opacity:0.65; margin-top:2px; }
   #goNameSubmit, #rankingCloseBtn, #settingsCloseBtn, #goDigestReplayBtn, #goBackBtn, #vsResultBackBtn {
     font-family: -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
     font-size:14px; font-weight:bold; color:#04151c;
@@ -588,6 +589,7 @@
   <div id="goNameEntry" style="display:none;">
     <input type="text" id="goNameInput" maxlength="10" placeholder="なまえ(10文字まで)">
     <button type="button" id="goNameSubmit">登録</button>
+    <div class="nameNote">※入力した名前は世界ランキングとして全プレイヤーに公開されます</div>
   </div>
   <div class="best" id="goBest">ベストクリアタイム: 未クリア</div>
   <div class="best" id="goTrophies">獲得トロフィー: 0/3</div>
@@ -682,7 +684,7 @@
   <div class="actbtn" id="btnTetsu">ザ・世界</div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js" integrity="sha384-CI3ELBVUz9XQO+97x6nwMDPosPR5XvsxW2ua7N1Xeygeh1IxtgqtCkGfQY9WWdHu" crossorigin="anonymous"></script>
 <script>
 (function(){
 "use strict";
@@ -2481,6 +2483,24 @@ function updateSkullBlast(dt){
 // ============================================================
 const particles = [];
 const particleGeo = new THREE.SphereGeometry(1,8,6);
+// ---- 球体パーティクル用のメッシュ再利用プール ----
+// 爆発・炎・煙はいずれも「共有ジオメトリ+MeshBasicMaterial(色・不透明度だけ違う)」という同じ構造のため、
+// 寿命が切れたMesh(Materialごと)を毎回dispose()して捨てるのではなく、非表示にしてプールへ戻し次回の発生時に
+// 再利用する。頻繁に生成される小さな球体を都度new/disposeしていたことによるGC・GPUリソースの生成コストを削減する
+const particleMeshPool = [];
+function acquireParticleMesh(colorHex, opacity){
+  let mesh = particleMeshPool.pop();
+  if (!mesh) mesh = new THREE.Mesh(particleGeo, new THREE.MeshBasicMaterial({ transparent:true }));
+  mesh.material.color.setHex(colorHex);
+  mesh.material.opacity = opacity;
+  mesh.visible = true;
+  scene.add(mesh);
+  return mesh;
+}
+function releaseParticleMesh(mesh){
+  scene.remove(mesh);
+  particleMeshPool.push(mesh);
+}
 function spawnExplosion(x,y,z,opts){
   digestLogEffect('explosion', x, y, z); // ハイライトダイジェスト用(位置のみ記録し、opts等の見た目の細部は再生時のデフォルトに委ねる)
   opts = opts || {};
@@ -2492,8 +2512,7 @@ function spawnExplosion(x,y,z,opts){
   for (let i=0;i<count;i++){
     let c = Math.random()<0.5 ? colorA : colorB;
     if (theWorldActive) c = invertHex(c); // ザ・ワールド中に発生したパーティクルはネガポジ反転色
-    const mat = new THREE.MeshBasicMaterial({ color: c, transparent:true, opacity:1 });
-    const mesh = new THREE.Mesh(particleGeo, mat);
+    const mesh = acquireParticleMesh(c, 1);
     mesh.position.set(x,y,z);
     const theta = Math.random()*Math.PI*2;
     const phi = Math.acos(Math.random()*2-1);
@@ -2503,7 +2522,6 @@ function spawnExplosion(x,y,z,opts){
       Math.abs(Math.cos(phi))*spd + 3,
       Math.sin(phi)*Math.sin(theta)*spd
     );
-    scene.add(mesh);
     const baseScale = (0.6 + Math.random()*0.6) * sizeMult;
     mesh.scale.setScalar(baseScale);
     particles.push({ mesh, vel, age:0, life:0.5, baseScale, grow:true });
@@ -2541,14 +2559,12 @@ const FLAME_SPAWN_INTERVAL = 0.05; // 毎フレームではなく、この間隔
 function spawnFlameParticle(x,y,z){
   let c = Math.random()<0.5 ? 0xff7700 : 0xffb200;
   if (theWorldActive) c = invertHex(c); // ザ・ワールド中に発生したパーティクルはネガポジ反転色
-  const mat = new THREE.MeshBasicMaterial({ color: c, transparent:true, opacity:0.85 });
-  const mesh = new THREE.Mesh(particleGeo, mat);
+  const mesh = acquireParticleMesh(c, 0.85);
   const ox=(Math.random()-0.5)*1.3, oy=(Math.random()-0.5)*1.3, oz=(Math.random()-0.5)*1.3;
   mesh.position.set(x+ox, y+oy, z+oz);
   const baseScale = (0.5 + Math.random()*0.5) * FLAME_SCALE_MULT;
   mesh.scale.setScalar(baseScale);
   const vel = new THREE.Vector3((Math.random()-0.5)*1.5, (Math.random())*1.5+0.5, (Math.random()-0.5)*1.5);
-  scene.add(mesh);
   particles.push({ mesh, vel, age:0, life:0.3*FLAME_LIFE_MULT, baseScale, grow:false });
 }
 // ジャンプ上昇中、両足・バックパック下面から噴射するバーナー状の炎(小さく青白い、下向きに噴き出す)
@@ -2557,14 +2573,12 @@ let thrusterFlameTimer = 0;
 function spawnThrusterFlame(x,y,z){
   let c = Math.random()<0.5 ? 0x66ccff : 0xffffff;
   if (theWorldActive) c = invertHex(c);
-  const mat = new THREE.MeshBasicMaterial({ color: c, transparent:true, opacity:0.85 });
-  const mesh = new THREE.Mesh(particleGeo, mat);
+  const mesh = acquireParticleMesh(c, 0.85);
   const ox=(Math.random()-0.5)*0.4, oz=(Math.random()-0.5)*0.4;
   mesh.position.set(x+ox, y, z+oz);
   const baseScale = 0.35 + Math.random()*0.35;
   mesh.scale.setScalar(baseScale);
   const vel = new THREE.Vector3((Math.random()-0.5)*1.0, -(4+Math.random()*3), (Math.random()-0.5)*1.0);
-  scene.add(mesh);
   particles.push({ mesh, vel, age:0, life:0.25, baseScale, grow:false });
 }
 const jetPoints = [rightFootJet, leftFootJet, backpackJetL, backpackJetR];
@@ -2576,8 +2590,7 @@ let hoverThrustTimer = 0;
 function spawnHoverThrustFlame(x,y,z,dirX,dirZ){
   let c = Math.random()<0.5 ? 0x66ccff : 0xffffff;
   if (theWorldActive) c = invertHex(c);
-  const mat = new THREE.MeshBasicMaterial({ color: c, transparent:true, opacity:0.85 });
-  const mesh = new THREE.Mesh(particleGeo, mat);
+  const mesh = acquireParticleMesh(c, 0.85);
   const oy = (Math.random()-0.5)*0.3;
   mesh.position.set(x, y+oy, z);
   const sizeMult = playerForm === 2 ? 3 : 2; // 通常は2倍、フォーム2中はさらに大きく3倍
@@ -2585,7 +2598,6 @@ function spawnHoverThrustFlame(x,y,z,dirX,dirZ){
   mesh.scale.setScalar(baseScale);
   const spd = 3 + Math.random()*2;
   const vel = new THREE.Vector3(dirX*spd + (Math.random()-0.5)*0.6, 0.3, dirZ*spd + (Math.random()-0.5)*0.6);
-  scene.add(mesh);
   particles.push({ mesh, vel, age:0, life:0.3, baseScale, grow:false });
 }
 function updateHoverThrust(dt){
@@ -2660,8 +2672,7 @@ function updateParticles(dt){
     const p = particles[i];
     p.age += dt;
     if (p.age >= p.life){
-      scene.remove(p.mesh);
-      p.mesh.material.dispose();
+      releaseParticleMesh(p.mesh);
       particles.splice(i,1);
       continue;
     }
@@ -2690,28 +2701,43 @@ let damageSmokeTimer = 0;
 function spawnDamageSmoke(x,y,z){
   let c = 0x333333 + Math.floor(Math.random()*0x101010);
   if (theWorldActive) c = invertHex(c);
-  const mat = new THREE.MeshBasicMaterial({ color:c, transparent:true, opacity:0.5 });
-  const mesh = new THREE.Mesh(particleGeo, mat);
+  const mesh = acquireParticleMesh(c, 0.5);
   mesh.position.set(x,y,z);
   const baseScale = 0.7 + Math.random()*0.6;
   mesh.scale.setScalar(baseScale);
   const vel = new THREE.Vector3((Math.random()-0.5)*1.0, 2.0+Math.random()*1.5, (Math.random()-0.5)*1.0);
-  scene.add(mesh);
   particles.push({ mesh, vel, age:0, life:1.6+Math.random()*0.8, baseScale, grow:false, rise:true });
 }
 // ---- 一瞬だけ表示される直線状のレーザービーム(スペシャルブロックの球体・ラスボスの口から共用) ----
-// 着弾は瞬時(判定と同時)に行い、このビームはあくまで見た目の演出として少しの間だけ表示してフェードアウトする
+// 着弾は瞬時(判定と同時)に行い、このビームはあくまで見た目の演出として少しの間だけ表示してフェードアウトする。
+// ジオメトリは半径1・長さ1の単位円柱を1個だけ共有し、実際の太さ・長さはmesh.scaleで表現することで、
+// 発射のたびにCylinderGeometryを新規生成/破棄していたコストを無くしている(Meshも同様にプールして使い回す)
 const laserBeams = [];
-function spawnLaserBeam(x1,y1,z1,x2,y2,z2,colorHex,radius,life){
-  const dir = new THREE.Vector3(x2-x1, y2-y1, z2-z1);
-  const len = Math.max(0.01, dir.length());
-  const geo = new THREE.CylinderGeometry(radius, radius, len, 8, 1, true);
-  const c = theWorldActive ? invertHex(colorHex) : colorHex;
-  const mat = new THREE.MeshBasicMaterial({ color:c, transparent:true, opacity:0.9, depthWrite:false, side:THREE.DoubleSide });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.position.set((x1+x2)/2, (y1+y2)/2, (z1+z2)/2);
-  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), dir.clone().normalize());
+const laserBeamGeo = new THREE.CylinderGeometry(1, 1, 1, 8, 1, true);
+const laserBeamMeshPool = [];
+const laserBeamDirScratch = new THREE.Vector3();
+const laserBeamUpScratch = new THREE.Vector3(0,1,0);
+function acquireLaserBeamMesh(colorHex){
+  let mesh = laserBeamMeshPool.pop();
+  if (!mesh) mesh = new THREE.Mesh(laserBeamGeo, new THREE.MeshBasicMaterial({ transparent:true, depthWrite:false, side:THREE.DoubleSide }));
+  mesh.material.color.setHex(colorHex);
+  mesh.material.opacity = 0.9;
   scene.add(mesh);
+  return mesh;
+}
+function releaseLaserBeamMesh(mesh){
+  scene.remove(mesh);
+  laserBeamMeshPool.push(mesh);
+}
+function spawnLaserBeam(x1,y1,z1,x2,y2,z2,colorHex,radius,life){
+  laserBeamDirScratch.set(x2-x1, y2-y1, z2-z1);
+  const len = Math.max(0.01, laserBeamDirScratch.length());
+  const c = theWorldActive ? invertHex(colorHex) : colorHex;
+  const mesh = acquireLaserBeamMesh(c);
+  mesh.scale.set(radius, len, radius);
+  mesh.position.set((x1+x2)/2, (y1+y2)/2, (z1+z2)/2);
+  laserBeamDirScratch.normalize();
+  mesh.quaternion.setFromUnitVectors(laserBeamUpScratch, laserBeamDirScratch);
   laserBeams.push({ mesh, age:0, life });
 }
 function updateLaserBeams(dt){
@@ -2719,9 +2745,7 @@ function updateLaserBeams(dt){
     const b = laserBeams[i];
     b.age += dt;
     if (b.age >= b.life){
-      scene.remove(b.mesh);
-      b.mesh.geometry.dispose();
-      b.mesh.material.dispose();
+      releaseLaserBeamMesh(b.mesh);
       laserBeams.splice(i,1);
       continue;
     }
@@ -3085,15 +3109,16 @@ const vsResultBackBtnEl = document.getElementById('vsResultBackBtn');
 // 要素を毎回1個生成し、CSSのtransitionでleft/topを目的地へ動かした後、アニメーション終了を待って取り除く
 // ワールド座標(x,y,z)を現在のカメラ視点での画面ピクセル座標に変換する(物資強奪の飛び出しアイコンの発生位置に使う)。
 // カメラの真後ろなど通常起こらない状況の保険として、その場合は画面中央にフォールバックする
+const worldToScreenPosScratch = new THREE.Vector3(), worldToScreenViewScratch = new THREE.Vector3();
 function worldToScreenPoint(x, y, z){
   camera.updateMatrixWorld();
-  const v = new THREE.Vector3(x, y, z);
-  const view = v.clone().applyMatrix4(camera.matrixWorldInverse);
-  if (view.z >= 0) return { x: window.innerWidth/2, y: window.innerHeight/2 };
-  v.project(camera);
+  worldToScreenPosScratch.set(x, y, z);
+  worldToScreenViewScratch.copy(worldToScreenPosScratch).applyMatrix4(camera.matrixWorldInverse);
+  if (worldToScreenViewScratch.z >= 0) return { x: window.innerWidth/2, y: window.innerHeight/2 };
+  worldToScreenPosScratch.project(camera);
   return {
-    x: clamp((v.x*0.5+0.5) * window.innerWidth, 0, window.innerWidth),
-    y: clamp((1-(v.y*0.5+0.5)) * window.innerHeight, 0, window.innerHeight)
+    x: clamp((worldToScreenPosScratch.x*0.5+0.5) * window.innerWidth, 0, window.innerWidth),
+    y: clamp((1-(worldToScreenPosScratch.y*0.5+0.5)) * window.innerHeight, 0, window.innerHeight)
   };
 }
 // ジョジョ立ちで物資を奪われた側のキャラクター(胸のあたりの高さ)の画面上の位置を返す
@@ -3575,12 +3600,7 @@ function cancelDemo(){
 // デモ開始直後、まだ1個も物資ブロックを取っていない間だけ、最も近い生存中のブロックへまっすぐ向かう
 // (カメラ基準の移動系なので、moveRefYawを基準にした角度差から一番近い移動キーの組み合わせを選ぶ)
 function demoSteerTowardFirstBlock(){
-  let nearest = null, nearestDist = Infinity;
-  for (const b of qblocks){
-    if (!b.alive) continue;
-    const d = Math.hypot(b.x-pos.x, b.z-pos.z);
-    if (d < nearestDist){ nearestDist = d; nearest = b; }
-  }
+  const nearest = findNearestAliveBlock(pos.x, pos.z);
   ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].forEach(releaseMoveKey);
   if (!nearest) return;
   const targetYaw = Math.atan2(-(nearest.x-pos.x), -(nearest.z-pos.z)); // 移動の積分式(-sin,-cos)と同じ規約
@@ -6001,37 +6021,40 @@ const SPECIAL_BUFF_WOBBLE_Y_AMP = 2.0;  // 上下のゆらぎの振幅(m)
 const SPECIAL_BUFF_WOBBLE_Y_FREQ = 0.9; // 回転角速度に対する上下ゆらぎの周波数比
 const SPECIAL_BUFF_LASER_COLOR = 0x33ff55; // レーザーは発光グリーン(銀玉自体の色とは別)
 const specialBuffOrbMat = new THREE.MeshStandardMaterial({ color:0xc8ccd4, metalness:0.9, roughness:0.15, emissive:0x8fa0b8, emissiveIntensity:0.9 }); // 発光銀色
-const specialBuffOrbs = [];
+// この機能の状態一式を1つのオブジェクトにまとめておく(グローバル変数を機能ごとにばらばらに増やさないための保守性対策)
+const specialBuff = {
+  orbs: [],
+  active: false,
+  orbCount: 0,   // 残っている銀玉の数(0〜SPECIAL_BUFF_ORB_COUNT)。0になった瞬間に効果終了する
+  laserTimer: 0,
+  orbitAngle: 0
+};
 for (let i=0;i<SPECIAL_BUFF_ORB_COUNT;i++){
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(SPECIAL_BUFF_ORB_RADIUS, 16, 12), specialBuffOrbMat);
   mesh.visible = false;
   scene.add(mesh);
-  specialBuffOrbs.push(mesh);
+  specialBuff.orbs.push(mesh);
 }
-let specialBuffActive = false;
-let specialBuffOrbCount = 0;   // 残っている銀玉の数(0〜SPECIAL_BUFF_ORB_COUNT)。0になった瞬間に効果終了する
-let specialBuffLaserTimer = 0;
-let specialBuffOrbitAngle = 0;
 function updateSpecialBuffOrbVisibility(){
-  for (let i=0;i<SPECIAL_BUFF_ORB_COUNT;i++) specialBuffOrbs[i].visible = i < specialBuffOrbCount;
+  for (let i=0;i<SPECIAL_BUFF_ORB_COUNT;i++) specialBuff.orbs[i].visible = i < specialBuff.orbCount;
 }
 function activateSpecialBuff(){
-  specialBuffActive = true;
-  specialBuffOrbCount = SPECIAL_BUFF_ORB_COUNT;
-  specialBuffLaserTimer = 0;
-  specialBuffOrbitAngle = 0;
+  specialBuff.active = true;
+  specialBuff.orbCount = SPECIAL_BUFF_ORB_COUNT;
+  specialBuff.laserTimer = 0;
+  specialBuff.orbitAngle = 0;
   updateSpecialBuffOrbVisibility();
 }
 function deactivateSpecialBuff(){
-  specialBuffActive = false;
-  specialBuffOrbCount = 0;
-  specialBuffOrbs.forEach(m => { m.visible = false; });
+  specialBuff.active = false;
+  specialBuff.orbCount = 0;
+  specialBuff.orbs.forEach(m => { m.visible = false; });
 }
 // ダメージを受けるたびに呼ぶ(applySkullHitの実ダメージ発生時に呼び出す)。銀玉を1個減らし、0になったら効果ごと終了する
 function damageSpecialBuffOrb(){
-  if (!specialBuffActive || specialBuffOrbCount <= 0) return;
-  specialBuffOrbCount--;
-  if (specialBuffOrbCount <= 0){ deactivateSpecialBuff(); return; }
+  if (!specialBuff.active || specialBuff.orbCount <= 0) return;
+  specialBuff.orbCount--;
+  if (specialBuff.orbCount <= 0){ deactivateSpecialBuff(); return; }
   updateSpecialBuffOrbVisibility();
 }
 // 周囲(SPECIAL_BUFF_RANGE以内)の敵ザク・ドクロ(飛行/落下中のみ)のうち近い順に、残っている銀玉の数だけ即座に撃破する。
@@ -6052,9 +6075,9 @@ function fireSpecialBuffLasers(){
   // 対象が銀玉の数に満たない場合も、残っている銀玉すべてから同時にレーザーを発射する(近い順の対象を使い回す)。
   // ただし同じ対象を複数の玉が撃った場合、実際の撃破処理は1回だけ行う(2本目以降は着弾演出のみ)
   const destroyed = new Set();
-  for (let i=0;i<specialBuffOrbCount;i++){
+  for (let i=0;i<specialBuff.orbCount;i++){
     const t = targets[i % targets.length];
-    const orb = specialBuffOrbs[i];
+    const orb = specialBuff.orbs[i];
     spawnLaserBeam(orb.position.x, orb.position.y, orb.position.z, t.x, t.y, t.z, SPECIAL_BUFF_LASER_COLOR, 0.25, 0.12);
     if (destroyed.has(t)) continue;
     destroyed.add(t);
@@ -6072,23 +6095,23 @@ function fireSpecialBuffLasers(){
 function updateSpecialBuff(dt){
   if (invincibleMode){
     // 無敵モード中は確認しやすいよう、取得の有無に関わらず常に銀玉3個を出しっぱなしにする(無敵モード中はダメージ自体が発生しないため自然に減らない)
-    if (!specialBuffActive) activateSpecialBuff();
-  } else if (!specialBuffActive){
+    if (!specialBuff.active) activateSpecialBuff();
+  } else if (!specialBuff.active){
     return;
   }
-  specialBuffOrbitAngle += SPECIAL_BUFF_ORBIT_SPEED*dt;
+  specialBuff.orbitAngle += SPECIAL_BUFF_ORBIT_SPEED*dt;
   const cy = airY + SPECIAL_BUFF_ORBIT_HEIGHT;
   for (let i=0;i<SPECIAL_BUFF_ORB_COUNT;i++){
-    const angle = specialBuffOrbitAngle + i*(Math.PI*2/SPECIAL_BUFF_ORB_COUNT);
+    const angle = specialBuff.orbitAngle + i*(Math.PI*2/SPECIAL_BUFF_ORB_COUNT);
     // 単調な円軌道にならないよう、半径・高さともサイン波で緩くゆらす(球体ごとに位相をずらして揃って動かないようにする)
-    const wobbleR = Math.sin(specialBuffOrbitAngle*SPECIAL_BUFF_WOBBLE_R_FREQ + i*2.1) * SPECIAL_BUFF_WOBBLE_R_AMP;
-    const wobbleY = Math.sin(specialBuffOrbitAngle*SPECIAL_BUFF_WOBBLE_Y_FREQ + i*1.7) * SPECIAL_BUFF_WOBBLE_Y_AMP;
+    const wobbleR = Math.sin(specialBuff.orbitAngle*SPECIAL_BUFF_WOBBLE_R_FREQ + i*2.1) * SPECIAL_BUFF_WOBBLE_R_AMP;
+    const wobbleY = Math.sin(specialBuff.orbitAngle*SPECIAL_BUFF_WOBBLE_Y_FREQ + i*1.7) * SPECIAL_BUFF_WOBBLE_Y_AMP;
     const r = SPECIAL_BUFF_ORBIT_RADIUS + wobbleR;
-    specialBuffOrbs[i].position.set(pos.x+Math.cos(angle)*r, cy+wobbleY, pos.z+Math.sin(angle)*r);
+    specialBuff.orbs[i].position.set(pos.x+Math.cos(angle)*r, cy+wobbleY, pos.z+Math.sin(angle)*r);
   }
-  specialBuffLaserTimer += dt;
-  if (specialBuffLaserTimer >= SPECIAL_BUFF_LASER_INTERVAL){
-    specialBuffLaserTimer -= SPECIAL_BUFF_LASER_INTERVAL;
+  specialBuff.laserTimer += dt;
+  if (specialBuff.laserTimer >= SPECIAL_BUFF_LASER_INTERVAL){
+    specialBuff.laserTimer -= SPECIAL_BUFF_LASER_INTERVAL;
     fireSpecialBuffLasers();
   }
 }
@@ -6790,24 +6813,23 @@ function triggerCpuForm2(){
 }
 
 // 一番近い生存中の物資ブロックを探す
-function findNearestAliveBlock(fromX, fromZ){
+// 配列(x/zプロパティを持つオブジェクトの集まり)の中から、指定座標に最も近い1つを探す共通ヘルパー。
+// filterFnを渡すとその条件を満たす要素だけを対象にする(渡さなければ全要素が対象)
+function findNearest(list, fromX, fromZ, filterFn){
   let nearest = null, nearestDist = Infinity;
-  for (const b of qblocks){
-    if (!b.alive) continue;
-    const d = Math.hypot(b.x-fromX, b.z-fromZ);
-    if (d < nearestDist){ nearestDist = d; nearest = b; }
+  for (const item of list){
+    if (filterFn && !filterFn(item)) continue;
+    const d = Math.hypot(item.x-fromX, item.z-fromZ);
+    if (d < nearestDist){ nearestDist = d; nearest = item; }
   }
   return nearest;
 }
+function findNearestAliveBlock(fromX, fromZ){
+  return findNearest(qblocks, fromX, fromZ, b => b.alive);
+}
 // 現在飛行中のハロのうち、最も近いものを探す(CPUがザ・世界未使用可能な間、積極的に追いかけるために使う)
 function findNearestFlyingHaro(fromX, fromZ){
-  let nearest = null, nearestDist = Infinity;
-  for (const s of haros){
-    if (s.phase !== 'flying') continue;
-    const d = Math.hypot(s.x-fromX, s.z-fromZ);
-    if (d < nearestDist){ nearestDist = d; nearest = s; }
-  }
-  return nearest;
+  return findNearest(haros, fromX, fromZ, s => s.phase === 'flying');
 }
 
 // CPUの毎フレーム処理。移動(物資へ直進)・ジョジョ立ち判定・ザ・世界の発動と経過・盤外復帰をまとめて行う
