@@ -2480,7 +2480,7 @@ function updateBossDefeatFall(dt){
 const COLONY_TIME_LIMIT = 20.0;     // 秒。この時間までにラスボスを撃破できないと落ちてくる(演出の検証用に短くした暫定値。本来は100秒)
 const COLONY_FALL_TIME = 9.6;       // 上空から着弾するまでの時間(秒)。当初3.2秒だったが、じっくり見せるため1/3の速度に落とした
 const COLONY_COUNTDOWN_TIME = 10.0; // 落下の何秒前からカウントダウンを表示するか
-const COLONY_BLAST_TIME = 6.6;      // 着弾後、ドーム状の爆発が広がりきるまでの時間(秒)。当初2.2秒から3倍に伸ばしてゆっくり広がるようにした
+const COLONY_BLAST_TIME = 4.0;      // 着弾後、ドーム状の爆発が広がりきるまでの時間(秒)。2.2秒→6.6秒と伸ばしたが長すぎたため4秒に調整
 const COLONY_WHITEOUT_HOLD = 0.35;  // 画面が真っ白になったまま保持する時間(秒)
 const COLONY_WHITEOUT_FADE = 1.4;   // 白から「背景だけの画」へ戻していく時間(秒)
 const COLONY_RADIUS = 90.0;         // 円筒の半径(m)
@@ -2611,8 +2611,8 @@ function startColonyDrop(){
 // (真上から落ちてくるため、通常の背面視点のままではコロンが画面に映らない)
 // 演出カメラの位置は「カメラ → プレイヤー → コロンの着弾地点」が一直線に並ぶ配置にする。
 // 距離はこのゲームのズームの上限(150m)まで引いた広角の振り切りで、自機を手前に入れたまま落下地点を見る
-const COLONY_CAM_DIST = 150.0; // m(通常のズーム操作の上限と同じ=一番引いた状態)
-const COLONY_CAM_HEIGHT = 45.0; // m(自機の頭越しに落下地点を見下ろせる程度の高さ)
+const COLONY_CAM_DIST = 100.0; // m(自機の後方へ下がる距離)
+const COLONY_CAM_HEIGHT = 5.0; // m(地面すれすれの低い位置。ここから見上げる「あおり」の画にする)
 const COLONY_CAM_FOV = 90;      // 度。演出中だけレンズも広角に振り切る(通常の画角では、落ちてくるコロンが最後の一瞬しか画面に入らないため)
 let colonyPrevFov = -1;         // 演出前の画角(終了時に元へ戻す)
 function updateColonyCamera(){
@@ -7723,7 +7723,8 @@ function loop(now){
   // ダイジェスト再生中はupdateDigestPlayback内で専用のカメラワークを適用済みのため、ここでは呼ばない
   // コロン落としの演出中は、updateColonyDrop内の専用カメラワークを適用済みのため通常の追従カメラは動かさない
   if (!digestPlaybackActive && !colonyDrop.active && !gameOver && !awaitingDifficulty) updateCamera(dt);
-  if (!digestPlaybackActive && !gameOver && !awaitingDifficulty) updateQBlockTargeting();
+  // コロン落としの演出中は物資ブロックの[+]/Target表示も消す(演出の邪魔になるため)
+  if (!digestPlaybackActive && !colonyDrop.active && !gameOver && !awaitingDifficulty) updateQBlockTargeting();
   else { qblockReticleEls.forEach(el => { el.style.display = 'none'; }); offscreenTargetEl.style.display = 'none'; }
 
   renderer.render(scene, camera);
