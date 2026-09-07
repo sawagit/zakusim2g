@@ -644,6 +644,10 @@
       <input type="checkbox" id="autoRotateCheck" checked>
       視界自動回転(常に背中を見る)
     </label>
+    <label id="fpsLimitLabel" class="settingsOption">
+      <input type="checkbox" id="fpsLimitCheck">
+      省電力モード(30fps・発熱と電池消費を抑える)
+    </label>
     <button type="button" id="settingsCloseBtn">閉じる</button>
   </div>
 </div>
@@ -684,7 +688,7 @@
       <div class="rankingColTitle">獲得済みトロフィー(<span id="trophyOwnedCount">0</span>/22)</div>
       <div id="trophyOwnedList"></div>
     </div>
-    <div class="rankingNote">※上段はこの端末のブラウザだけに保存されたローカル記録です。世界ランキングはラスボスを撃破してニックネームを登録すると、そのタイムと名前が全プレイヤーに公開される形で送信されます。</div>
+    <div class="rankingNote">※上段はこの端末のブラウザだけに保存されたローカル記録です。世界ランキングはラスボスを撃破してニックネームを登録すると、そのタイムと名前が全プレイヤーに公開される形で送信されます。<br>※ローカル記録と獲得トロフィー・解禁状態は、この端末のブラウザにのみ保存されます。ブラウザのデータ消去、しばらく遊ばずに放置した場合の自動削除、機種変更などで消えることがあります(別の端末には引き継げません)。</div>
     <button type="button" id="rankingCloseBtn">閉じる</button>
   </div>
 </div>
@@ -703,6 +707,23 @@
 <script>
 (function(){
 "use strict";
+
+// 3Dライブラリ(three.js)はCDNから読み込んでいるため、通信環境やネットワーク制限によっては取得できないことがある。
+// その場合は以降の初期化がすべて失敗して真っ白な画面になってしまうので、理由が分かる案内だけ出して終了する
+if (typeof THREE === 'undefined'){
+  const el = document.createElement('div');
+  el.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;'
+    + 'padding:24px;box-sizing:border-box;background:#06121a;color:#eaffff;text-align:center;line-height:1.8;'
+    + 'font-family:-apple-system,"Segoe UI","Hiragino Kaku Gothic ProN",Meiryo,sans-serif;font-size:15px;';
+  el.textContent = '3Dライブラリ(three.js)を読み込めませんでした。通信環境をご確認のうえ、ページを再読み込みしてください。';
+  document.body.appendChild(el);
+  return;
+}
+
+// 公開しているビルドの識別用。不具合の連絡を受けたときに、相手が古いキャッシュを見ているのか最新版なのかを
+// 切り分けられるよう、クレジット表記の末尾に小さく表示する(変更を公開するたびにこの日付を更新する)
+const BUILD_VERSION = '2026-09-07';
+document.querySelectorAll('.credit').forEach(el => { el.textContent += ' / build ' + BUILD_VERSION; });
 
 // ============================================================
 // 定数
@@ -920,6 +941,9 @@ window.addEventListener('resize', ()=>{
   camera.aspect = window.innerWidth/window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  // 省電力スリープ中は毎フレームの描画を止めているため、画面回転などでサイズが変わったら、
+  // ここで1コマだけ描き直しておく(そうしないと前のサイズのまま引き伸ばされた絵が残ってしまう)
+  if (powerSaveSleeping) renderer.render(scene, camera);
 });
 
 scene.add(new THREE.AmbientLight(0xffffff, 0.7));
@@ -2923,14 +2947,28 @@ const bgmAudioEl = new Audio();
 bgmAudioEl.preload = 'none'; // 選択されるまで読み込まない(5MB超のファイルのため)
 bgmAudioEl.loop = true;
 bgmAudioEl.src = 'bgm/action-battle.mp3';
+let bgmWanted = false; // 本来BGMが鳴っているべき状態かどうか(タブ非表示・ポーズによる一時的な停止と区別するために持つ)
 function startBGM(){
+  // 自動プレイデモは無音で流す(タイトル画面を放置しただけの端末が、置いたまま勝手に音楽を鳴らし出さないようにするため)
+  if (demoStarting || demoActive) return;
+  bgmWanted = true;
   if (!soundEnabled) return;
   bgmAudioEl.volume = BGM_MP3_VOLUME;
   bgmAudioEl.currentTime = 0; // 毎回曲頭から再生し直す
   bgmAudioEl.play().catch(()=>{}); // ブラウザの自動再生制限で拒否された場合は無視する(ensureAudio()と同じくユーザー操作後に呼ばれる想定)
 }
 function stopBGM(){
+  bgmWanted = false;
   bgmAudioEl.pause();
+}
+// タブを離れた・一時停止(PAUSE)した間だけBGMを止める。stopBGM()と違い「鳴っているべき状態」の記録は残したままにして、
+// 曲の位置も保持するため、戻ってきたら続きから再開できる
+function suspendBGM(){
+  bgmAudioEl.pause();
+}
+function resumeBGM(){
+  if (!bgmWanted || !soundEnabled || paused || document.hidden) return;
+  bgmAudioEl.play().catch(()=>{});
 }
 
 // ============================================================
@@ -3079,6 +3117,7 @@ function endTutorialIntro(){
   if (!tutorialIntroActive) return;
   tutorialIntroActive = false;
   paused = false;
+  resumeBGM(); // 導入メッセージ中にタブを離れていた場合に備え、再開時にBGMも戻す(鳴っているべき状態でなければ何もしない)
 }
 // メッセージ0(導入)・VS Mode導入メッセージのタイマーは、ゲームがpaused中でも進める必要があるため、
 // 通常のupdate系関数とは別に(pausedによる分岐の外側で)毎フレーム呼び出す
@@ -3354,7 +3393,17 @@ function closeSettingsOverlay(){
 const DEMO_RANKING_TOGGLE_INTERVAL = 8.0; // 秒。この間隔でローカル⇔世界を切り替える
 let demoRankingToggleTimer = 0;
 let demoRankingShowWorld = false;
-let demoWorldRankingCache = { 1: null, 2: null }; // null=未取得、配列=取得済み(空配列も含む)。デモ開始のたびに取得し直す
+let demoWorldRankingCache = { 1: null, 2: null }; // null=未取得、配列=取得済み(空配列も含む)
+// デモ開始のたびに取得し直すと、放置された端末が何度もデモを繰り返すたびに通信し、世界ランキングを預けている
+// Google Apps Script側の1日あたりの実行枠を無駄に消費してしまう。そのため一度取得したら一定時間は使い回す
+const DEMO_WORLD_RANKING_TTL = 300000; // ミリ秒(5分)
+let demoWorldRankingFetchedAt = 0;
+function refreshDemoWorldRankingIfStale(){
+  if (demoWorldRankingFetchedAt && Date.now() - demoWorldRankingFetchedAt < DEMO_WORLD_RANKING_TTL) return;
+  demoWorldRankingFetchedAt = Date.now(); // 取得失敗時もここで更新し、繋がらない状態で何度も叩き続けないようにする
+  fetchWorldRankingForDemo(1);
+  fetchWorldRankingForDemo(2);
+}
 function fetchWorldRankingForDemo(diff){
   fetch(WORLD_RANKING_URL + '?part=' + encodeURIComponent(diffLabel(diff)))
     .then(res => res.json())
@@ -3378,9 +3427,7 @@ function renderDemoRankingPanel(){
 function showDemoRanking(){
   demoRankingShowWorld = false;
   demoRankingToggleTimer = 0;
-  demoWorldRankingCache = { 1: null, 2: null };
-  fetchWorldRankingForDemo(1);
-  fetchWorldRankingForDemo(2);
+  refreshDemoWorldRankingIfStale(); // 前回の取得から5分以上経っている場合だけ取り直す(それ以外は取得済みの内容を使い回す)
   renderDemoRankingPanel();
   rankingCornerEl.style.display = 'block';
 }
@@ -3633,6 +3680,7 @@ const TITLE_DEMO_IDLE = 10.0; // 無操作でデモが始まるまでの秒数(�
 const DEMO_GAMEOVER_AUTO_DELAY = 3.0; // デモ中のGAME OVER画面表示後、自動でタイトルへ戻るまでの追加待ち時間(秒)
 let titleIdleTimer = 0;
 let demoActive = false;
+let demoStarting = false; // startDemo()内のstartGame()実行中だけtrue(この時点ではdemoActiveがまだ立っていないため、BGM抑止の判定に使う)
 let demoDiffNext = 1;
 let rankingOverlayOpen = false; // ランキングオーバーレイ表示中はタイトル画面の自動デモ開始タイマーを止める
 let settingsOverlayOpen = false; // 設定オーバーレイ表示中も同様にタイマー・ゲーム開始キーを止める
@@ -3657,7 +3705,13 @@ const DEMO_ZOOM_PERIOD = 35.0; // 秒。ズーム最大⇔最小を1往復する
 const demoAI = { moveTimer:0, jumpTimer:0, jojoTimer:0, zoomT:0, blocksSeekDone:false };
 let demoCameraCycleIndex = 0; // 0,1: 固定視点 / 2: 自動回転、を繰り返す(ランダムだと偏って見えることがあるため、3回に2回・1回を確定で保証する)
 function startDemo(){
+  demoStarting = true; // startGame()内のstartBGM()を抑止するための目印(この時点ではまだdemoActiveを立てられない)
   startGame(demoDiffNext, false);
+  demoStarting = false;
+  // デモは完全に無音で流す(タイトル画面を放置しただけの端末が、置いたまま勝手に音を出さないようにするため)。
+  // 効果音・BGM・警告の読み上げはすべてsoundEnabledを見ているため、ここで落とすだけで全経路が止まる。
+  // 次に通常のプレイを始めるときは、startGame()が改めてチェックボックスの設定を読み直す
+  soundEnabled = false;
   // 第三部解禁後は第一部→第二部→第三部の順で3種類を巡回する(解禁前は従来通り第一部・第二部の交互)
   demoDiffNext = part3Unlocked ? (demoDiffNext % 3) + 1 : (demoDiffNext === 1 ? 2 : 1);
   demoActive = true;
@@ -4747,8 +4801,15 @@ difficultyEl.addEventListener('change', ()=>{ titleIdleTimer = 0; markUserActive
 ['pointerdown','mousedown','touchstart','keydown','wheel'].forEach(type => {
   window.addEventListener(type, markUserActive, { capture:true, passive:true });
 });
-// タブに戻ってきた/画面が復帰したときも、無操作の積算をリセットしておく
-document.addEventListener('visibilitychange', ()=>{ if (!document.hidden) markUserActive(); });
+// タブを離れている間(他のアプリに切り替えた場合も含む)はBGMを止める。戻ってきたら続きから再開し、無操作の積算もリセットする
+document.addEventListener('visibilitychange', ()=>{
+  if (document.hidden){
+    suspendBGM();
+  } else {
+    markUserActive();
+    resumeBGM();
+  }
+});
 
 // ランキング(この端末のローカル記録)。タイトル画面のボタンから開閉する
 const rankingBtnEl = document.getElementById('rankingBtn');
@@ -4813,6 +4874,7 @@ function togglePause(){
   paused = !paused;
   pauseBtnEl.classList.toggle('active', paused);
   pauseOverlayEl.style.display = paused ? 'block' : 'none';
+  if (paused) suspendBGM(); else resumeBGM(); // ポーズ中はBGMも止める(曲の位置は保持し、再開時は続きから鳴らす)
 }
 pauseBtnEl.addEventListener('click', (e)=>{ e.stopPropagation(); ensureAudio(); togglePause(); });
 pauseBtnEl.addEventListener('touchstart', (e)=>{ e.preventDefault(); e.stopPropagation(); ensureAudio(); togglePause(); }, { passive:false });
@@ -4865,6 +4927,13 @@ const JUMP_CAM_PULLBACK_MAX = 300;    // 追加距離の上限(m)
 let dragging = false, lastPX=0, lastPY=0;
 let cameraAutoRotate = true; // 視界自動回転モード(常にプレイヤーの背中を見る)。難易度選択画面で設定(デフォルトはオン)
 let soundEnabled = true; // 効果音・BGMを鳴らすか。難易度選択画面で設定(デフォルトはオン)
+// 省電力モード(30fps上限)。設定画面のチェックボックスで即座に切り替わる(デフォルトはオフ)。
+// スマホの発熱・電池消費を抑えたい場合に使う。描画回数がおおむね半分になる代わりに動きの滑らかさは落ちる
+const FPS_LIMIT_MIN_INTERVAL = 1000/30 - 2; // ミリ秒。60Hzの端末で確実に1コマおきに処理されるよう、わずかに短くしておく
+let fpsLimitEnabled = false;
+const fpsLimitCheckEl = document.getElementById('fpsLimitCheck');
+fpsLimitEnabled = fpsLimitCheckEl.checked;
+fpsLimitCheckEl.addEventListener('change', ()=>{ fpsLimitEnabled = fpsLimitCheckEl.checked; });
 
 renderer.domElement.addEventListener('mousedown', (e)=>{
   if (demoActive){ cancelDemo(); return; }
@@ -7235,6 +7304,10 @@ function resolveVsMatch(){
 
 function loop(now){
   requestAnimationFrame(loop);
+  // 省電力モード(設定画面のチェックボックス)がオンの間は、描画・進行とも30fpsに間引く。
+  // 見送ったフレームではlastTimeを更新しないため、次に処理するときのdtがそのぶん大きくなり、
+  // ゲームの進む速さ自体は通常時と変わらない(フレームレート非依存の作りをそのまま活かす)
+  if (fpsLimitEnabled && (now - lastTime) < FPS_LIMIT_MIN_INTERVAL) return;
   const dt = clamp((now-lastTime)/1000, 0, 0.05);
   lastTime = now;
 

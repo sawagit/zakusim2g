@@ -1,0 +1,12 @@
+{
+  "name": "zakusim2g",
+  "version": "0.0.0",
+  "private": true,
+  "description": "ZAKUMIRO2 の開発用ツール置き場(ゲーム本体は zakusim.html 単体で動くため、この設定はビルドには一切関与しない)",
+  "scripts": {
+    "smoke": "node tools/smoke-test.mjs"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.47.0"
+  }
+}
