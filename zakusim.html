@@ -2502,7 +2502,8 @@ const COLONY_LENGTH = 420.0;        // 円筒の長さ(m)
 const COLONY_START_Y = 1100.0;      // 落下開始高度(m)
 const COLONY_TILT = 42*D2R;         // 傾き(鉛直から何度倒すか)。斜めに突き刺さる見た目にする
 const COLONY_EMBED_DEPTH = 10.0;    // 先端が地面へ潜り込む深さ(m)。深く突き刺さらず、浅く刺さった状態で止める
-const COLONY_BLAST_RADIUS = 1500.0; // 最終的なドーム爆発の半径(m)
+const COLONY_BLAST_RADIUS = 1500.0; // ドーム爆発の最大半径(m)
+const COLONY_BLAST_EXPAND_SLOW = 3.0; // ドームの広がる速さをこの割合ぶん遅くする(3=1/3の速さ)。ホワイトアウトの進行には影響しない
 // お菓子のコロンらしい見た目にするため、ビスケットの巻き模様を簡単な斜めストライプのテクスチャで表現する
 function createColonyTexture(){
   const canvas = document.createElement('canvas');
@@ -2679,7 +2680,11 @@ function updateColonyDrop(dt){
   } else if (colonyDrop.phase === 'blast'){
     // 突き刺さったコロンはそのまま残し、ドーム状の爆発だけが画面全体へ広がっていく
     const f = clamp(colonyDrop.timer/COLONY_BLAST_TIME, 0, 1);
-    const r = COLONY_BLAST_RADIUS*(0.04 + 0.96*Math.sqrt(f)); // 最初は一気に、後半はゆっくり広がる
+    // ドームの広がり方だけを1/3の速さに落とす(ホワイトアウトへの遷移はfのまま=タイミングは変えない)。
+    // その結果、白飛びが完了する時点でのドームの大きさは最大半径の6割ほどになるが、
+    // その時点でとっくにカメラを飲み込んでいるため、画面上は「ゆっくり膨らみ続けたまま白く飛ぶ」画になる
+    const rf = clamp(f/COLONY_BLAST_EXPAND_SLOW, 0, 1);
+    const r = COLONY_BLAST_RADIUS*(0.04 + 0.96*Math.sqrt(rf)); // 最初は一気に、後半はゆっくり広がる
     colonyBlastDome.scale.set(r, r, r);
     colonyBlastMat.opacity = 0.55 + 0.45*f; // 消えていくのではなく、逆に濃くなって画面を覆い尽くす
     // 後半にかけて画面を白く飛ばしていく(ドームがカメラを飲み込むタイミングに合わせる)
