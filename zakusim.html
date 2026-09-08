@@ -669,7 +669,7 @@
       視界自動回転(常に背中を見る)
     </label>
     <label id="fpsLimitLabel" class="settingsOption">
-      <input type="checkbox" id="fpsLimitCheck">
+      <input type="checkbox" id="fpsLimitCheck" checked>
       省電力モード(30fps・発熱と電池消費を抑える)
     </label>
     <button type="button" id="settingsCloseBtn">閉じる</button>
@@ -2477,8 +2477,21 @@ function updateBossDefeatFall(dt){
 // 制限時間内にラスボスを撃破できなかった場合、上空から巨大な円筒「コロン」が斜めに降ってきてステージへ突き刺さり、
 // ドーム状の大爆発が広がってゲームオーバーになる。見た目はお菓子のコロン(ビスケット地+クリームの詰まった断面)で、
 // 落下角度・突き刺さり方は「コロニー落とし」のジオラマを参考にした
-const COLONY_TIME_LIMIT = 300.0;    // 秒。この時間までにラスボスを撃破できないと落ちてくる。
-                                    // 経過時間はザ・世界の発動中は止まるため、時を止めた分だけこの制限時間も実質的に延びる
+// 制限時間はモードごとに変える(先へ進むほど短い=急かされる)。経過時間はザ・世界の発動中は止まるため、
+// 時を止めた分だけこの制限時間も実質的に延びる
+const COLONY_TIME_LIMIT_BY_DIFF = { 1: 300.0, 2: 200.0, 3: 150.0 }; // 秒
+// 演出の確認用に、URLのクエリで制限時間を上書きできるようにしておく(例: ...?colony=20 で20秒後に落ちてくる)。
+// 通常のプレイでは指定されないため影響しない。1〜3600秒の範囲のみ受け付ける
+const COLONY_TIME_LIMIT_OVERRIDE = (function(){
+  try{
+    const v = Number(new URLSearchParams(location.search).get('colony'));
+    return (isFinite(v) && v >= 1 && v <= 3600) ? v : -1;
+  }catch(e){ return -1; }
+})();
+function colonyTimeLimit(){
+  if (COLONY_TIME_LIMIT_OVERRIDE > 0) return COLONY_TIME_LIMIT_OVERRIDE;
+  return COLONY_TIME_LIMIT_BY_DIFF[difficulty] || COLONY_TIME_LIMIT_BY_DIFF[1];
+}
 const COLONY_FALL_TIME = 9.6;       // 上空から着弾するまでの時間(秒)。当初3.2秒だったが、じっくり見せるため1/3の速度に落とした
 const COLONY_COUNTDOWN_TIME = 10.0; // 落下の何秒前からカウントダウンを表示するか
 const COLONY_BLAST_TIME = 4.0;      // 着弾後、ドーム状の爆発が広がりきるまでの時間(秒)。2.2秒→6.6秒と伸ばしたが長すぎたため4秒に調整
@@ -2546,7 +2559,7 @@ const colonyDrop = { active:false, phase:'', timer:0, x:0, z:0, countdownShown:-
 // そのたびに小さく上のほうから現れて大きくなりながら手前へ迫る(上空から近づいてくる見立て)
 function updateColonyCountdown(){
   if (vsMode || colonyDrop.active || gameOver || state === 'victory'){ hideColonyCountdown(); return; }
-  const remain = COLONY_TIME_LIMIT - elapsedTime;
+  const remain = colonyTimeLimit() - elapsedTime;
   if (remain > COLONY_COUNTDOWN_TIME || remain <= 0){ hideColonyCountdown(); return; }
   const n = Math.ceil(remain);
   if (n === colonyDrop.countdownShown) return;
@@ -4248,7 +4261,8 @@ function checkSkullPlayerHit(s){
 // ---- 敵ザク(Lv.2限定。プレイヤーと同じ姿で空から降下し、着地後プレイヤーへ突進する) ----
 const ZAKU_SPAWN_INTERVAL = 5.0;     // 5秒毎に1機出現する(第三部はこの半分の間隔=2倍の頻度にする)
 const ZAKU_SPAWN_HEIGHT = 120.0;     // 出現時の高度
-const ZAKU_FREQ_RAMP_START_COUNT = 6; // 物資ブロックをこの個数目以降取得するたび、出現頻度が倍になる(第二部・第三部限定。銀玉の自動迎撃で凌ぐことを想定した終盤の難易度上昇)
+const ZAKU_FREQ_RAMP_START_COUNT = 6; // 物資ブロックをこの個数目以降取得するたび、出現頻度が倍になる(第二部・第三部限定。銀玉の自動迎撃で凌ぐことを想定した終盤の難易度上昇。ただし最後の1個の取得では増やさない)
+const ZAKU_MAX_ALIVE = 30;            // 同時に存在できる敵ザクの上限。終盤は出現間隔が0.1秒を切るため、上限が無いと際限なく増えて動作が重くなる
 let zakuSpawnFreqMult = 1.0;
 const ZAKU_SPAWN_RADIUS_MIN = 50.0;  // 出現距離の下限(m)
 const ZAKU_SPAWN_RADIUS_MAX = 500.0; // 出現距離の上限(m)。プレイヤーからこの範囲内のランダムな距離に降下してくる
@@ -4355,7 +4369,10 @@ function updateZakus(dt){
   zakuSpawnTimer += dt;
   if (zakuSpawnTimer >= spawnInterval){
     zakuSpawnTimer -= spawnInterval;
-    spawnZaku();
+    // 終盤は出現間隔が非常に短くなるため、同時に存在できる数に上限を設ける。
+    // 上限に達している間は出現を見送る(倒して減った分だけ、すぐに補充されていく)
+    if (zakus.length < ZAKU_MAX_ALIVE) spawnZaku();
+    if (zakuSpawnTimer > spawnInterval) zakuSpawnTimer = spawnInterval; // 1フレームに1機までのため、間隔より短い周期では溜め込まない
   }
 
   for (let i=zakus.length-1;i>=0;i--){
@@ -5228,8 +5245,8 @@ const JUMP_CAM_PULLBACK_MAX = 300;    // 追加距離の上限(m)
 let dragging = false, lastPX=0, lastPY=0;
 let cameraAutoRotate = true; // 視界自動回転モード(常にプレイヤーの背中を見る)。難易度選択画面で設定(デフォルトはオン)
 let soundEnabled = true; // 効果音・BGMを鳴らすか。難易度選択画面で設定(デフォルトはオン)
-// 省電力モード(30fps上限)。設定画面のチェックボックスで即座に切り替わる(デフォルトはオフ)。
-// スマホの発熱・電池消費を抑えたい場合に使う。描画回数がおおむね半分になる代わりに動きの滑らかさは落ちる
+// 省電力モード(30fps上限)。設定画面のチェックボックスで即座に切り替わる(負荷を抑えるためデフォルトはオン)。
+// 描画回数がおおむね半分になる代わりに動きの滑らかさは落ちる。滑らかさを優先したい場合は設定画面でオフにする
 const FPS_LIMIT_MIN_INTERVAL = 1000/30 - 2; // ミリ秒。60Hzの端末で確実に1コマおきに処理されるよう、わずかに短くしておく
 let fpsLimitEnabled = false;
 const fpsLimitCheckEl = document.getElementById('fpsLimitCheck');
@@ -6605,8 +6622,9 @@ function updateQBlock(dt){
     if (qblocksCollected === SPECIAL_QBLOCK_REVEAL_COUNT) revealSpecialQBlock(); // 第二部・第三部限定(内部でdifficultyを判定)
     if (qblocksCollected === qblockTotalCount - 1) revealLastSpecialQBlock(); // 第三部限定: 残り1個になったら、それを2個目のスペシャルブロックに変える
     // 6個目以降の取得毎に敵ザクの出現頻度を倍にする(第一部はそもそも敵ザクが出現しないため実質無関係)。
-    // 終盤(スペシャルブロックの銀玉で凌ぐことを想定した)難易度上昇
-    if (qblocksCollected >= ZAKU_FREQ_RAMP_START_COUNT) zakuSpawnFreqMult *= 2;
+    // 終盤(スペシャルブロックの銀玉で凌ぐことを想定した)難易度上昇。
+    // ただし最後の1個の取得では増やさない(第三部は全11個のため、最後まで倍々に積み重ねると出現数が過剰になるため)
+    if (qblocksCollected >= ZAKU_FREQ_RAMP_START_COUNT && qblocksCollected < qblockTotalCount) zakuSpawnFreqMult *= 2;
     if (qblocksCollected === 1) triggerDigestCapture('first_block'); // ハイライトダイジェスト用
     if (qblocksCollected === qblockLastWarningCount(difficulty)){
       awardTrophy('qblock_9'); // 難易度ごとに定めた「あと一つ」のタイミングで表示する(テキストはqblock_9(あと一つ！！)を流用)
@@ -7683,7 +7701,7 @@ function loop(now){
     updateBossDefeatFall(dt); // ラスボス撃破後、煙を出しながら落下→爆発する演出(state==='victory'の間も進める必要がある)
     // 制限時間内にラスボスを撃破できなかった場合の「コロン落とし」(全ステージ共通。VS Modeは対象外)
     updateColonyCountdown(); // 落下の10秒前からのカウントダウン表示
-    if (!vsMode && !colonyDrop.active && state !== 'victory' && !bossDefeatFalling && elapsedTime >= COLONY_TIME_LIMIT) startColonyDrop();
+    if (!vsMode && !colonyDrop.active && state !== 'victory' && !bossDefeatFalling && elapsedTime >= colonyTimeLimit()) startColonyDrop();
     updateRadar();
     updateCpu(dt); // VS Mode専用(vsMode===falseなら内部で即return)
     updateVsMatchTimer(dt); // VS Modeの制限時間(100秒)判定
