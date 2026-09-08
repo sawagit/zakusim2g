@@ -669,7 +669,7 @@
       視界自動回転(常に背中を見る)
     </label>
     <label id="fpsLimitLabel" class="settingsOption">
-      <input type="checkbox" id="fpsLimitCheck" checked>
+      <input type="checkbox" id="fpsLimitCheck">
       省電力モード(30fps・発熱と電池消費を抑える)
     </label>
     <button type="button" id="settingsCloseBtn">閉じる</button>
@@ -5264,8 +5264,8 @@ const JUMP_CAM_PULLBACK_MAX = 300;    // 追加距離の上限(m)
 let dragging = false, lastPX=0, lastPY=0;
 let cameraAutoRotate = true; // 視界自動回転モード(常にプレイヤーの背中を見る)。難易度選択画面で設定(デフォルトはオン)
 let soundEnabled = true; // 効果音・BGMを鳴らすか。難易度選択画面で設定(デフォルトはオン)
-// 省電力モード(30fps上限)。設定画面のチェックボックスで即座に切り替わる(負荷を抑えるためデフォルトはオン)。
-// 描画回数がおおむね半分になる代わりに動きの滑らかさは落ちる。滑らかさを優先したい場合は設定画面でオフにする
+// 省電力モード(30fps上限)。設定画面のチェックボックスで即座に切り替わる(デフォルトはオフ=通常の60fps)。
+// 一度デフォルトをオンにしたが、動きのカクつきが目立つためオフへ戻した。発熱・電池消費が気になる場合に手動で入れる
 const FPS_LIMIT_MIN_INTERVAL = 1000/30 - 2; // ミリ秒。60Hzの端末で確実に1コマおきに処理されるよう、わずかに短くしておく
 let fpsLimitEnabled = false;
 const fpsLimitCheckEl = document.getElementById('fpsLimitCheck');
