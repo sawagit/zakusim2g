@@ -4267,7 +4267,7 @@ function checkSkullPlayerHit(s){
 const ZAKU_SPAWN_INTERVAL = 5.0;     // 5秒毎に1機出現する(第三部はこの半分の間隔=2倍の頻度にする)
 const ZAKU_SPAWN_HEIGHT = 120.0;     // 出現時の高度
 const ZAKU_FREQ_RAMP_START_COUNT = 6; // 物資ブロックをこの個数目以降取得するたび、出現頻度が倍になる(第二部・第三部限定。銀玉の自動迎撃で凌ぐことを想定した終盤の難易度上昇。ただし最後の1個の取得では増やさない)
-const ZAKU_MAX_ALIVE = 30;            // 同時に存在できる敵ザクの上限。終盤は出現間隔が0.1秒を切るため、上限が無いと際限なく増えて動作が重くなる
+const ZAKU_MAX_ALIVE = 200;           // フィールド上に同時に存在できる敵ザクの上限。超えた分はプレイヤーから遠い個体から取り除く(cullDistantZakus)
 let zakuSpawnFreqMult = 1.0;
 const ZAKU_SPAWN_RADIUS_MIN = 50.0;  // 出現距離の下限(m)
 const ZAKU_SPAWN_RADIUS_MAX = 500.0; // 出現距離の上限(m)。プレイヤーからこの範囲内のランダムな距離に降下してくる
@@ -4348,6 +4348,21 @@ function removeZaku(i){
   scene.remove(zakus[i].mesh.group);
   zakus.splice(i,1);
 }
+// 動作が重くなるのを防ぐための安全策。フィールド上の敵ザクがZAKU_MAX_ALIVEを超えたら、
+// 超えたぶんだけプレイヤーから最も遠い個体を取り除いて上限を保つ。
+// 出現そのものは止めないため、近くの密度は落ちない(遠くの見えていない個体だけが静かに消える)。
+// 撃破ではないので爆発・効果音は出さず、ドクロ撃破数などのカウントにも影響しない
+function cullDistantZakus(){
+  while (zakus.length > ZAKU_MAX_ALIVE){
+    let farIdx = 0, farDistSq = -1;
+    for (let i=0;i<zakus.length;i++){
+      const dx = zakus[i].x-pos.x, dz = zakus[i].z-pos.z;
+      const distSq = dx*dx + dz*dz; // 比較だけなので平方根は取らない
+      if (distSq > farDistSq){ farDistSq = distSq; farIdx = i; }
+    }
+    removeZaku(farIdx);
+  }
+}
 // ゾンビのように両腕を前方へ突き出したまま、足だけで歩く不気味な歩行アニメーション
 function updateZakuWalkAnim(z, dt){
   const m = z.mesh;
@@ -4374,11 +4389,10 @@ function updateZakus(dt){
   zakuSpawnTimer += dt;
   if (zakuSpawnTimer >= spawnInterval){
     zakuSpawnTimer -= spawnInterval;
-    // 終盤は出現間隔が非常に短くなるため、同時に存在できる数に上限を設ける。
-    // 上限に達している間は出現を見送る(倒して減った分だけ、すぐに補充されていく)
-    if (zakus.length < ZAKU_MAX_ALIVE) spawnZaku();
+    spawnZaku();
     if (zakuSpawnTimer > spawnInterval) zakuSpawnTimer = spawnInterval; // 1フレームに1機までのため、間隔より短い周期では溜め込まない
   }
+  cullDistantZakus(); // 出現数が上限を超えた分だけ、遠くにいる個体から静かに取り除く
 
   for (let i=zakus.length-1;i>=0;i--){
     const z = zakus[i];
