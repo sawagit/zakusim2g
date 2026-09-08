@@ -4267,7 +4267,6 @@ function checkSkullPlayerHit(s){
 const ZAKU_SPAWN_INTERVAL = 5.0;     // 5秒毎に1機出現する(第三部はこの半分の間隔=2倍の頻度にする)
 const ZAKU_SPAWN_HEIGHT = 120.0;     // 出現時の高度
 const ZAKU_FREQ_RAMP_START_COUNT = 6; // 物資ブロックをこの個数目以降取得するたび、出現頻度が倍になる(第二部・第三部限定。銀玉の自動迎撃で凌ぐことを想定した終盤の難易度上昇。ただし最後の1個の取得では増やさない)
-const ZAKU_MAX_ALIVE = 30;            // 同時に存在できる敵ザクの上限。終盤は出現間隔が0.1秒を切るため、上限が無いと際限なく増えて動作が重くなる
 let zakuSpawnFreqMult = 1.0;
 const ZAKU_SPAWN_RADIUS_MIN = 50.0;  // 出現距離の下限(m)
 const ZAKU_SPAWN_RADIUS_MAX = 500.0; // 出現距離の上限(m)。プレイヤーからこの範囲内のランダムな距離に降下してくる
@@ -4374,9 +4373,9 @@ function updateZakus(dt){
   zakuSpawnTimer += dt;
   if (zakuSpawnTimer >= spawnInterval){
     zakuSpawnTimer -= spawnInterval;
-    // 終盤は出現間隔が非常に短くなるため、同時に存在できる数に上限を設ける。
-    // 上限に達している間は出現を見送る(倒して減った分だけ、すぐに補充されていく)
-    if (zakus.length < ZAKU_MAX_ALIVE) spawnZaku();
+    // 同時に存在できる数の上限は設けない(終盤に大量の敵ザクが押し寄せる状況そのものを狙った演出のため)。
+    // 際限なく増え続けることはなく、制限時間で必ずコロンが落ちてゲームが終わる(詳細は「コロン落とし」を参照)
+    spawnZaku();
     if (zakuSpawnTimer > spawnInterval) zakuSpawnTimer = spawnInterval; // 1フレームに1機までのため、間隔より短い周期では溜め込まない
   }
 
