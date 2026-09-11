@@ -3398,7 +3398,7 @@ function updatePart2TeaseBanner(dt){
 }
 
 // ---- チュートリアル(第一部限定。難易度選択画面のチェックボックスでON/OFFできる。デフォルトはON) ----
-// 兵器開発者ヤッサン・ウソツキー博士(👴🏾)からの指示、という体裁のメッセージで案内する
+// 兵器開発者ウソツキー博士(👴🏾)からの指示、という体裁のメッセージで案内する
 const tutorialHintEl = document.getElementById('tutorialHint');
 const TUTORIAL_STEP4_DURATION = 20.0;
 const TUTORIAL_INTRO_DURATION = 10.0; // メッセージ0(導入)の最大表示時間。これが経過するか何らかの操作をすると次へ進む
@@ -3418,7 +3418,7 @@ function startTutorialIntro(){
   tutorialIntroTimer = 0;
   tutorialIntroDuration = TUTORIAL_INTRO_DURATION;
   paused = true; // 10秒経過 or 何らかの操作があるまでゲームを停止させる(演出上の「一時停止」であり、通常のポーズUIは出さない)
-  showTutorialHint('👴🏾私はヤッサン・ウソツキー博士だ。このシミュレーターで君に新モビル兵器の機能テストをしてもらいたい');
+  showTutorialHint('👴🏾私はウソツキー博士だ。このシミュレーターで君に新モビル兵器の機能テストをしてもらいたい');
 }
 // VS Mode専用の導入メッセージ。仕組みはメッセージ0と共通(この間ゲームを停止させ、5秒経過か何らかの操作で終了する)だが、
 // ステップ1〜4のような多段階の判定は行わない一回きりのメッセージにする
