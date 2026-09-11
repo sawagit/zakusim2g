@@ -709,7 +709,7 @@
       </div>
     </div>
     <div class="rankingTrophies">
-      <div class="rankingColTitle">獲得済みトロフィー(<span id="trophyOwnedCount">0</span>/22)</div>
+      <div class="rankingColTitle">獲得済みトロフィー(<span id="trophyOwnedCount">0</span>/<span id="trophyTotalCount">0</span>)</div>
       <div id="trophyOwnedList"></div>
     </div>
     <div class="rankingNote">※上段はこの端末のブラウザだけに保存されたローカル記録です。世界ランキングはラスボスを撃破してニックネームを登録すると、そのタイムと名前が全プレイヤーに公開される形で送信されます。<br>※ローカル記録と獲得トロフィー・解禁状態は、この端末のブラウザにのみ保存されます。ブラウザのデータ消去、しばらく遊ばずに放置した場合の自動削除、機種変更などで消えることがあります(別の端末には引き継げません)。</div>
@@ -2610,6 +2610,7 @@ function resetColonyDrop(){
 }
 function startColonyDrop(){
   if (colonyDrop.active) return;
+  awardTrophy('colony_drop'); // 時間切れは敗北だが、この演出を見たこと自体を記念のトロフィーにする
   colonyDrop.active = true;
   colonyDrop.phase = 'falling';
   colonyDrop.timer = 0;
@@ -2717,7 +2718,7 @@ function triggerVictory(){
   // ジャンプ上昇中(vy>0)にラスボスを撃破した場合、victory中は物理更新が行われずvyが正のまま残り続け、
   // updateJumpThrusterがいつまでも「上昇中」と判定してスラスター音が鳴り続けてしまうため、ここで明示的に止める
   stopThrusterSound();
-  awardTrophy(difficulty === 1 ? 'last_boss_p1' : 'last_boss');
+  awardTrophy(difficulty === 1 ? 'last_boss_p1' : difficulty === 2 ? 'last_boss_p2' : 'last_boss_p3');
   if (difficulty === 1) pendingPart2TeaseMessage = true; // 次にタイトル画面へ戻ったタイミングで一度だけメッセージを出す
   if (difficulty === 1) unlockVsMode(); // 第一部クリアでVS Modeを解禁する(triggerVictory()はVS Mode中は呼ばれないため、ここでのdifficulty===1は必ず通常プレイの第一部を指す)
   if (difficulty === 2) unlockPart3(); // 第二部クリアで第三部を解禁する
@@ -3347,6 +3348,7 @@ let worldRateMult = 1.0;
 let worldRateMultSetAt = 0;
 let skullSpeedResetAt = 0; // フォーム2中にドクロに触れた瞬間の時刻。ドクロの速度をこの時点から初速で再スタートさせる
 let skullsDefeated = 0; // バーン立ちやフォーム2の被弾で撃破したドクロの数(トロフィー判定用。命中しないまま消えたものは含まない)
+let zakusDefeated = 0;  // 撃破した敵ザクの数(トロフィー判定用)。タックルされて消えた個体や、上限超過で間引かれた個体は含まない
 function currentWorldRateMult(){
   if (worldRateMult >= 1.0) return 1.0;
   const recoverSteps = Math.floor((elapsedTime - worldRateMultSetAt) / currentRateStep);
@@ -3684,6 +3686,7 @@ function openRankingOverlay(){
   if (part3Unlocked) document.getElementById('rankingListLv3').innerHTML = buildRankingColumnHTML(3);
   document.getElementById('trophyOwnedList').innerHTML = buildOwnedTrophiesHTML();
   document.getElementById('trophyOwnedCount').textContent = ownedTrophies.size;
+  document.getElementById('trophyTotalCount').textContent = Object.keys(TROPHIES).length; // 総数はベタ書きせず定義から数える
   document.getElementById('worldRankingColLv3').style.display = part3Unlocked ? 'block' : 'none';
   fetchWorldRanking(1);
   fetchWorldRanking(2);
@@ -3765,17 +3768,16 @@ function updateDemoRankingToggle(dt){
 // ---- トロフィー ----
 const TROPHIES = {
   all_blocks:  '全部落とした！',                 // エリア内の全？ブロックを取得
-  time_100:    'まだだ。まだ終わらんよ',         // 経過時間100秒
-  time_200:    '200秒だと！化け物か',             // 経過時間200秒
-  time_300:    'あえて言おう！300秒おめでとう！', // 経過時間300秒
   skull_1:     'やったか！？',                   // ドクロを1個撃破
-  skull_12:    '12個が全滅！？数分経たずにか！', // ドクロを12個撃破
+  zaku_12:     '12個が全滅！？数分経たずにか！', // 敵ザクを12機撃破(第二部以降のみ。第一部には敵ザクが出現しない)
   first_form2: '通常の3倍！',                    // 初めてフォーム2に変身
   first_world: '刻が見える！',                   // 初めてストップを発動
   first_fall:  '重力に魂を引かれた',             // 初めて落下した
   first_hit:   'か、母さーん！',                 // 初めてドクロに直撃された
-  last_boss:   'ラストシューティング',           // ラスボスブロックを撃破(第二部)
+  colony_drop: 'コロンが落ちた日',               // 初めてコロン落とし(時間切れ)を迎えた
   last_boss_p1:'勝ったッ！第一部完ッ！',          // ラスボスブロックを撃破(第一部)
+  last_boss_p2:'To Be Continued・・・',           // ラスボスブロックを撃破(第二部)
+  last_boss_p3:'ラストシューティング',           // ラスボスブロックを撃破(第三部)
   qblock_1:    'ひとつ！',                       // ？ブロックを1個目取得
   qblock_2:    '二つ！',                         // ？ブロックを2個目取得
   qblock_3:    '三つ！',                         // ？ブロックを3個目取得
@@ -3790,7 +3792,12 @@ const TROPHIES = {
 const TROPHY_TOAST_TIME = 3.5;
 const TROPHIES_KEY = 'zakusim_trophies';
 function loadOwnedTrophies(){
-  try{ return new Set(JSON.parse(localStorage.getItem(TROPHIES_KEY)) || []); }catch(e){ return new Set(); }
+  // 仕様変更で廃止されたID(旧: time_100/time_200/time_300/skull_12/last_boss)が保存されたままだと、
+  // 獲得数が総数を超えて「24/21」のような表示になってしまうため、現存するIDだけを残す
+  try{
+    const saved = JSON.parse(localStorage.getItem(TROPHIES_KEY)) || [];
+    return new Set(saved.filter(id => Object.prototype.hasOwnProperty.call(TROPHIES, id)));
+  }catch(e){ return new Set(); }
 }
 function saveOwnedTrophies(set){
   try{ localStorage.setItem(TROPHIES_KEY, JSON.stringify([...set])); }catch(e){}
@@ -3877,7 +3884,12 @@ function updateTrophyToast(dt){
 function onSkullDefeated(){
   skullsDefeated++;
   if (skullsDefeated >= 1) awardTrophy('skull_1');
-  if (skullsDefeated >= 12) awardTrophy('skull_12');
+}
+// 敵ザクをプレイヤーの攻撃(バーン立ち・フォーム2のオーラ・銀玉のレーザー)で撃破した際に呼ぶ。
+// タックルで消滅した個体(プレイヤーが被弾した側)や、cullDistantZakus()で間引かれた個体は撃破に数えない
+function onZakuDefeated(){
+  zakusDefeated++;
+  if (zakusDefeated >= 12) awardTrophy('zaku_12');
 }
 
 function diffLabel(d){ return d===3 ? '第三部' : d===2 ? '第二部' : '第一部'; } // 難易度の表示名(内部の1/2/3という数値自体は変更しない)
@@ -4551,6 +4563,7 @@ function updateHiddenAura(dt){
       spawnExplosion(z.x, zakuWorldY(z), z.z);
       playExplosionSound();
       removeZaku(i);
+      onZakuDefeated();
     }
   }
   // ラスボスにも有効(バーン立ちのヒットと同じ処理)
@@ -4659,6 +4672,7 @@ function resetGame(){
 
   skulls.forEach(s => { s.phase='idle'; s.activated=false; s.group.visible=false; s.warnSprite.visible=false; s.shadowMesh.visible=false; });
   skullsDefeated = 0;
+  zakusDefeated = 0;
   jojoDome.visible = false;
   domeTimer = -1;
   skullBlastDome.visible = false;
@@ -4858,6 +4872,7 @@ function pressJojo(){
       spawnExplosion(z.x, zakuWorldY(z), z.z);
       playExplosionSound();
       removeZaku(i);
+      onZakuDefeated();
     }
   }
 
@@ -6746,7 +6761,7 @@ function fireSpecialBuffLasers(){
     playExplosionSound();
     if (t.type === 'zaku'){
       const idx = zakus.indexOf(t.ref);
-      if (idx >= 0) removeZaku(idx);
+      if (idx >= 0){ removeZaku(idx); onZakuDefeated(); }
     } else {
       resetSkull(t.ref);
       onSkullDefeated();
@@ -7695,9 +7710,6 @@ function loop(now){
     }
     if (state !== 'victory' && !theWorldActive) elapsedTime += dt; // ラスボス撃破の瞬間・ストップ発動中はタイマーを止める(カウントダウン終了で再開)
     if (!vsMode){ // VS Modeはトロフィー・ハイライトダイジェストのどちらとも非連動の独立モードのため
-      if (elapsedTime >= 100) awardTrophy('time_100');
-      if (elapsedTime >= 200) awardTrophy('time_200');
-      if (elapsedTime >= 300) awardTrophy('time_300');
       if (!digestTime20Fired && elapsedTime >= 20){ digestTime20Fired = true; triggerDigestCapture('time_20s'); } // ハイライトダイジェスト用
     }
     updateEnemy(dt);
