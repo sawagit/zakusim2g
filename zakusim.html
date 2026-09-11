@@ -59,7 +59,7 @@
     body.vs-mode .vsLifeBar { padding:14px 20px; gap:8px; }
     body.vs-mode .vsCpuLabel { font-size:22px; }
   }
-  /* ジョジョ立ちで物資を奪った瞬間に、奪われた側→奪った側のアイコンへ飛んでいく演出用(JSがleft/topを書き換えてtransitionで動かす) */
+  /* バーン立ちで物資を奪った瞬間に、奪われた側→奪った側のアイコンへ飛んでいく演出用(JSがleft/topを書き換えてtransitionで動かす) */
   .vsFlyIcon {
     position:fixed; z-index:25; pointer-events:none; font-size:56px;
     filter: drop-shadow(0 0 8px rgba(255,220,80,0.9)) drop-shadow(0 0 18px rgba(255,170,0,0.75));
@@ -341,7 +341,7 @@
     position:fixed; right:22px; bottom:calc(26px + env(safe-area-inset-bottom));
     z-index:15; flex-direction:row; align-items:center; gap:14px;
   }
-  /* ジョジョ・ザ・世界は縦に並べた列のまま、JUMPだけをその左側、ちょうど中間の高さに離して配置し三角形になるようにする */
+  /* バーン・ストップは縦に並べた列のまま、JUMPだけをその左側、ちょうど中間の高さに離して配置し三角形になるようにする */
   #poseButtons { display:flex; flex-direction:column; align-items:flex-end; gap:14px; }
   .actbtn {
     width:64px; height:64px; border-radius:50%;
@@ -569,13 +569,13 @@
   <b>操作方法</b><br>
   ↑ / ↓ : 前進 / 後退<br>
   ← / → : その場で左右旋回<br>
-  Space : ジャンプ &nbsp; J : ジョジョ立ち &nbsp; W : ザ・世界<br>
+  Space : ジャンプ &nbsp; J : バーン立ち &nbsp; W : ストップ<br>
   ドラッグ : 視点回転 &nbsp; ホイール : ズーム(10〜150m)<br>
   <b>全高17m・重量10t</b>
   <div id="gpHint">
     <b>🎮 コントローラー操作</b><br>
     左スティック : 移動 &nbsp; 右スティック : 視点回転<br>
-    A/× : ジャンプ &nbsp; X/□ : ジョジョ立ち &nbsp; Y/△ : ザ・世界<br>
+    A/× : ジャンプ &nbsp; X/□ : バーン立ち &nbsp; Y/△ : ストップ<br>
     L2/R2 : ズーム &nbsp; Start/Options : ポーズ
   </div>
 </div>
@@ -722,8 +722,8 @@
 <div id="actionButtons">
   <div class="actbtn" id="btnJump">JUMP</div>
   <div id="poseButtons">
-    <div class="actbtn" id="btnJojo">ジョジョ</div>
-    <div class="actbtn" id="btnTetsu">ザ・世界</div>
+    <div class="actbtn" id="btnJojo">バーン</div>
+    <div class="actbtn" id="btnTetsu">ストップ</div>
   </div>
 </div>
 
@@ -830,7 +830,7 @@ const AIR = {
 const LAND_TIME=0.5, LAND_MAX_DROP=4.0; // 着地硬化時間
 const LAND_KNEEL_HIP=28.6*D2R, LAND_KNEEL_KNEE=-108.9*D2R;
 
-// ジョジョ立ち(発動するたびに3種類のポーズを順にループする。bodyYawOffsetは進行方向に対する体の向きのずれ)
+// バーン立ち(発動するたびに3種類のポーズを順にループする。bodyYawOffsetは進行方向に対する体の向きのずれ)
 const JOJO_T=0.2;
 const JOJO_POSES = [
   { // ポーズ1(元祖): 左手を顔の前にかざす決めポーズ
@@ -893,12 +893,12 @@ const SKULL_SPAWN_ARC_WIDE=240*D2R; // 背面カメラ設定でない(視界自�
 const SKULL_SPAWN_ARC_SECOND=90*D2R; // 背面カメラ設定かつドクロ2体出現中、2体目はこの狭い範囲に制限する
 const SKULL_SPAWN_RADIUS_SECOND=150.0; // 同条件で、2体目はプレイヤーからこの距離に出現する
 const SKULL_RADIUS=2.5;          // 直径5mの半径
-const JOJO_DESTROY_RANGE=24.0;   // ジョジョ立ちでドクロを撃退できる効果範囲の半径(元の20mから20%拡大)
+const JOJO_DESTROY_RANGE=24.0;   // バーン立ちでドクロを撃退できる効果範囲の半径(元の20mから20%拡大)
 const JOJO_DESTROY_RANGE_FORM2=35.0; // フォーム2中はこの半径に拡大される
 const JOJO_FORWARD_OFFSET=5.0;   // 効果範囲・ドーム中心をプレイヤーから前方にずらす距離
 const JOJO_DOME_TIME=0.1;        // 効果範囲ドームの表示時間
-const JOJO_INPUT_LOCK_TIME=0.3;  // ジョジョ立ちの硬化時間(操作受付禁止時間)。この間は移動系キーでも解除できない
-const JOJO_LOCK_TIME=1.0;        // ジョジョ立ちの自動解除時間。この間は再発動できず、経過後は自動でポーズ解除
+const JOJO_INPUT_LOCK_TIME=0.3;  // バーン立ちの硬化時間(操作受付禁止時間)。この間は移動系キーでも解除できない
+const JOJO_LOCK_TIME=1.0;        // バーン立ちの自動解除時間。この間は再発動できず、経過後は自動でポーズ解除
 const MAX_SKULLS=3;              // ドクロの最大同時発射数
 const SKULL_MULTI_UNLOCK_TIME=40.0; // この経過時間後、同時発射数が2体になる
 const SKULL_TRIPLE_UNLOCK_TIME=100.0; // この経過時間後、同時発射数が3体(MAX_SKULLS)になる
@@ -926,7 +926,7 @@ const FORM2_TURN_MULT=2;         // 旋回速度倍率(歩行・走行とは別�
 const HEAD_TRACK_MAX=120*D2R;
 const HEAD_TRACK_T=0.3;
 
-// ？ブロック・ザ・ワールド
+// ？ブロック・ストップ
 const CHAR_HEIGHT = LEG_LEN + TORSO_H + HEAD_R*2; // ロボットの全高(17.0m)。ジャンプ中の到達判定に使う
 const QBLOCK_SIZE=20.0;
 const QBLOCK_BOTTOM_Y=20.0;      // 底辺の浮遊高さ(ジャンプで届く高さまで下げた値)
@@ -939,7 +939,7 @@ const QBLOCK_MIN_FROM_ORIGIN=40.0; // 初期位置(原点)付近には配置し�
 const THE_WORLD_FREEZE_TIME=5.0;       // 通常時の継続時間(秒)
 const THE_WORLD_FREEZE_TIME_FORM2=10.0; // フォーム2中はこの継続時間になる(発動中にフォーム2に変身した場合も切り替わる)
 const THE_WORLD_FREEZE_TIME_BOSS=20.0;  // ラスボスが1回目のタッチを受けた状態(フェーズ2)の間はこの継続時間になる(最優先)
-const THE_WORLD_READY_COLOR=0xC4AE00; // ザ・ワールド使用可能中のプレイヤーの色(黄色)
+const THE_WORLD_READY_COLOR=0xC4AE00; // ストップ使用可能中のプレイヤーの色(黄色)
 
 // ============================================================
 // three.js セットアップ
@@ -975,7 +975,7 @@ const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
 dirLight.position.set(30, 60, 20);
 scene.add(dirLight);
 
-// ---- ザ・ワールド用: 色反転(ネガポジ反転)ヘルパー ----
+// ---- ストップ用: 色反転(ネガポジ反転)ヘルパー ----
 function invertHex(hex){ return (~hex) & 0xffffff; }
 function hexToCss(hex){ return '#' + hex.toString(16).padStart(6,'0'); }
 
@@ -1708,7 +1708,7 @@ function buildFloorTiles(textures){
     floorTilePieces.push(im);
   }
   floorTilesReady = true;
-  floorMats.forEach(m => { m.userData.invertUniform.value = theWorldActive ? 1 : 0; }); // 読み込み完了時点で既にザ・世界発動中だった場合に備える
+  floorMats.forEach(m => { m.userData.invertUniform.value = theWorldActive ? 1 : 0; }); // 読み込み完了時点で既にストップ発動中だった場合に備える
   updateFloorTileVisibility(); // 読み込み完了時点で既に難易度が確定していた場合に備え、現在の状態を反映する
 }
 
@@ -1733,7 +1733,7 @@ const GROUND_EDGE_TILE_SIZE = FLOOR_TILE_SIZE; // 床タイルと同じ50m基準
       texZ.needsUpdate = true;
       const matX = createInvertibleMaterial(texX, { roughness:0.9, metalness:0.1 });
       const matZ = createInvertibleMaterial(texZ, { roughness:0.9, metalness:0.1 });
-      matX.userData.invertUniform.value = theWorldActive ? 1 : 0; // 読み込み完了時点で既にザ・世界発動中だった場合に備える
+      matX.userData.invertUniform.value = theWorldActive ? 1 : 0; // 読み込み完了時点で既にストップ発動中だった場合に備える
       matZ.userData.invertUniform.value = theWorldActive ? 1 : 0;
       // BoxGeometryの面順序は[+X,-X,+Y,-Y,+Z,-Z]。上面(2)・底面(3)はgroundEdgeMat/topMatのまま変更しない。
       // materials/materialsInvertedの両方に同じインスタンスを入れておくことで、invertWorldColors()がどちらの配列を
@@ -1879,7 +1879,7 @@ form2Fin.position.set(0, 1.15, 0.05);
 form2Fin.visible = false;
 headGroup.add(form2Fin);
 
-// ザ・ワールド使用可能中専用: 頭部に生える3本のブレード状の角(頭頂を中心に均等配置し、外側へ傾ける)
+// ストップ使用可能中専用: 頭部に生える3本のブレード状の角(頭頂を中心に均等配置し、外側へ傾ける)
 const theWorldHornMat = new THREE.MeshStandardMaterial({ color:THE_WORLD_READY_COLOR, metalness:0.45, roughness:0.5 });
 const theWorldHorns = [];
 for (let i=0;i<3;i++){
@@ -1898,7 +1898,7 @@ for (let i=0;i<3;i++){
   theWorldHorns.push(pivot);
 }
 
-// 裏技のジョジョ立ち長押し中、頭部だけを地味に点滅させるための薄い光の膜(通常は不透明度0で見えない)
+// 裏技のバーン立ち長押し中、頭部だけを地味に点滅させるための薄い光の膜(通常は不透明度0で見えない)
 const jojoChargeGlowMat = new THREE.MeshBasicMaterial({ color:0xffffff, transparent:true, opacity:0, depthWrite:false });
 const jojoChargeGlowMesh = new THREE.Mesh(new THREE.SphereGeometry(HEAD_R*1.12, 16, 12), jojoChargeGlowMat);
 headGroup.add(jojoChargeGlowMesh);
@@ -1923,7 +1923,7 @@ hipGroup.add(rightArm.root, leftArm.root);
 // ============================================================
 // 敵ザク(Lv.2限定。プレイヤーと同じ姿の敵。空から降下し、着地後プレイヤーへ突進する)
 // ============================================================
-// プレイヤー本体の色を変える演出(フォーム2・ザ・世界使用可能中)につられて敵ザクの色まで変わらないよう、素材は複製して独立させる
+// プレイヤー本体の色を変える演出(フォーム2・ストップ使用可能中)につられて敵ザクの色まで変わらないよう、素材は複製して独立させる
 const zakuBodyMat = bodyMat.clone();
 const zakuBackpackMat = backpackMat.clone();
 const zakuSlitMat = slitMat.clone();
@@ -2063,7 +2063,7 @@ function createHaroShadow(){
 }
 
 // ============================================================
-// ？ブロック(ジャンプでつつくとザ・ワールドが1回使用可能になる)
+// ？ブロック(ジャンプでつつくとストップが1回使用可能になる)
 // ============================================================
 function createQBlockTexture(bgHex, fgHex){
   const size = 256;
@@ -2091,7 +2091,7 @@ const SPECIAL_QBLOCK_COLOR = 0xcc1414, SPECIAL_QBLOCK_FG = 0xffe9a8;
 const SPECIAL_QBLOCK_EMISSIVE = 0xff2a2a;
 const specialQBlockMat = new THREE.MeshStandardMaterial({ map:createQBlockTexture(SPECIAL_QBLOCK_COLOR, SPECIAL_QBLOCK_FG), metalness:0.6, roughness:0.15, emissive:SPECIAL_QBLOCK_EMISSIVE, emissiveIntensity:0.55 });
 const specialQBlockMatInverted = new THREE.MeshStandardMaterial({ map:createQBlockTexture(invertHex(SPECIAL_QBLOCK_COLOR), invertHex(SPECIAL_QBLOCK_FG)), metalness:0.6, roughness:0.15, emissive:invertHex(SPECIAL_QBLOCK_EMISSIVE), emissiveIntensity:0.55 });
-// 床に落とす影(共通の素材を全ブロックで共有し、ザ・ワールド中の反転も一括で行えるようにする)
+// 床に落とす影(共通の素材を全ブロックで共有し、ストップ中の反転も一括で行えるようにする)
 const qblockShadowGeo = new THREE.CircleGeometry(QBLOCK_SIZE*0.6, 32);
 const qblockShadowMat = new THREE.MeshBasicMaterial({ color:0x000000, transparent:true, opacity:0.3, depthWrite:false });
 
@@ -2344,7 +2344,7 @@ function hitBossPhase1(){
   bossMesh.scale.set(bossSizeMult, bossSizeMult, bossSizeMult);
   bossFlashTimer = 0;
   playChargeSound();
-  if (theWorldActive) deactivateTheWorld(); // 1回目のタッチ時にザ・ワールドが発動中だった場合は解除する
+  if (theWorldActive) deactivateTheWorld(); // 1回目のタッチ時にストップが発動中だった場合は解除する
 }
 // 第三部限定: 2回目のヒットでも撃破されず、さらに一段高く上がって口レーザーの頻度が倍になる第3形態へ移行する
 function hitBossPhase2(){
@@ -2378,7 +2378,7 @@ function updateBossFlash(dt){
 function updateBoss(dt){
   if (!bossActive) return;
   if (!theWorldActive){
-    // ザ・ワールド中は周回・目の向きとも完全に静止する(他の敵と同様)
+    // ストップ中は周回・目の向きとも完全に静止する(他の敵と同様)
     bossAngle += curBossAngularSpeed*bossSpeedMult*dt;
     bossX = Math.cos(bossAngle)*curBossOrbitRadius;
     bossZ = Math.sin(bossAngle)*curBossOrbitRadius;
@@ -2388,7 +2388,7 @@ function updateBoss(dt){
   bossShadowMesh.position.set(bossX, 0.03, bossZ);
   bossShadowMesh.scale.set(bossSizeMult, bossSizeMult, bossSizeMult);
   bossShadowMesh.visible = !isOffGround(bossX, bossZ); // ステージ外・スリット上には影を落とさない
-  // ラスボスブロックの撃破判定はタッチ(接触)ではなく、ジョジョ立ちのヒット判定で行う(詳細はpressJojoを参照)
+  // ラスボスブロックの撃破判定はタッチ(接触)ではなく、バーン立ちのヒット判定で行う(詳細はpressJojoを参照)
 }
 
 // ---- ボスへの体当たり衝突判定(すり抜け防止) ----
@@ -2477,7 +2477,7 @@ function updateBossDefeatFall(dt){
 // 制限時間内にラスボスを撃破できなかった場合、上空から巨大な円筒「コロン」が斜めに降ってきてステージへ突き刺さり、
 // ドーム状の大爆発が広がってゲームオーバーになる。見た目はお菓子のコロン(ビスケット地+クリームの詰まった断面)で、
 // 落下角度・突き刺さり方は「コロニー落とし」のジオラマを参考にした
-// 制限時間はモードごとに変える(先へ進むほど短い=急かされる)。経過時間はザ・世界の発動中は止まるため、
+// 制限時間はモードごとに変える(先へ進むほど短い=急かされる)。経過時間はストップの発動中は止まるため、
 // 時を止めた分だけこの制限時間も実質的に延びる
 const COLONY_TIME_LIMIT_BY_DIFF = { 1: 300.0, 2: 200.0, 3: 150.0 }; // 秒
 // 演出の確認用に、URLのクエリで制限時間を上書きできるようにしておく(例: ...?colony=20 で20秒後に落ちてくる)。
@@ -2711,7 +2711,7 @@ function updateColonyDrop(dt){
   if (colonyDrop.phase === 'falling' || colonyDrop.phase === 'blast' || colonyDrop.phase === 'whiteout') updateColonyCamera();
 }
 
-let victoryPoseIndex = 0; // クリア演出のジョジョ立ちポーズ番号(triggerVictory()のたびに3種類からランダムに選び直す)
+let victoryPoseIndex = 0; // クリア演出のバーン立ちポーズ番号(triggerVictory()のたびに3種類からランダムに選び直す)
 function triggerVictory(){
   triggerDigestCapture('boss_defeat'); // ハイライトダイジェスト用(詳細は「ハイライトダイジェスト」節を参照)
   // ジャンプ上昇中(vy>0)にラスボスを撃破した場合、victory中は物理更新が行われずvyが正のまま残り続け、
@@ -2762,7 +2762,7 @@ function roundRect(ctx,x,y,w,h,r){
   ctx.arcTo(x,y,x+w,y,r);
   ctx.closePath();
 }
-// ジョジョ立ちの効果範囲を示す半透明ドーム(0.1秒フラッシュ)。上下半球とも描画する完全な球にしておく
+// バーン立ちの効果範囲を示す半透明ドーム(0.1秒フラッシュ)。上下半球とも描画する完全な球にしておく
 // (空中発動時は中心が浮くため下半分も見える必要がある。地上発動時は下半分が地面にめり込むが問題ない)
 const domeGeo = new THREE.SphereGeometry(JOJO_DESTROY_RANGE, 32, 24);
 const domeMat = new THREE.MeshBasicMaterial({
@@ -2868,7 +2868,7 @@ function spawnExplosion(x,y,z,opts){
   const speedMult = opts.speedMult || 1;
   for (let i=0;i<count;i++){
     let c = Math.random()<0.5 ? colorA : colorB;
-    if (theWorldActive) c = invertHex(c); // ザ・ワールド中に発生したパーティクルはネガポジ反転色
+    if (theWorldActive) c = invertHex(c); // ストップ中に発生したパーティクルはネガポジ反転色
     const mesh = acquireParticleMesh(c, 1);
     mesh.position.set(x,y,z);
     const theta = Math.random()*Math.PI*2;
@@ -2917,7 +2917,7 @@ const FLAME_LIFE_MULT = 5;
 const FLAME_SPAWN_INTERVAL = 0.05; // 毎フレームではなく、この間隔(秒)おきに間引いて生成する
 function spawnFlameParticle(x,y,z){
   let c = Math.random()<0.5 ? 0xff7700 : 0xffb200;
-  if (theWorldActive) c = invertHex(c); // ザ・ワールド中に発生したパーティクルはネガポジ反転色
+  if (theWorldActive) c = invertHex(c); // ストップ中に発生したパーティクルはネガポジ反転色
   const mesh = acquireParticleMesh(c, 0.85);
   const ox=(Math.random()-0.5)*1.3, oy=(Math.random()-0.5)*1.3, oz=(Math.random()-0.5)*1.3;
   mesh.position.set(x+ox, y+oy, z+oz);
@@ -3139,7 +3139,7 @@ function ensureAudio(){
   }
   if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
 }
-// ---- 実音声ファイルによる効果音(ジョジョ立ち・ザ・世界発動)。AudioContextでデコード済みのAudioBufferとして持ち、
+// ---- 実音声ファイルによる効果音(バーン立ち・ストップ発動)。AudioContextでデコード済みのAudioBufferとして持ち、
 // 再生のたびに新しいAudioBufferSourceNodeを作ることで、プレイヤー・CPU(VS Mode)が同時に鳴らしても重ねて再生できる ----
 const soundEffectBuffers = {}; // url -> AudioBuffer(デコード完了前はundefined、失敗時はnullのまま)
 function loadSoundEffectBuffer(url){
@@ -3233,7 +3233,7 @@ function playPowerUpSound(){
   });
 }
 function playChargeSound(){
-  // ハロに接触してザ・ワールドが使用可能になった瞬間の「コン」という短い音
+  // ハロに接触してストップが使用可能になった瞬間の「コン」という短い音
   if (!audioCtx || !soundEnabled) return;
   const now = audioCtx.currentTime;
   const osc = audioCtx.createOscillator();
@@ -3293,8 +3293,8 @@ function resumeBGM(){
 let pos = { x:0, z:0 };
 let yaw = 0;
 let airY = 0, vy = 0;
-let inAir = false; // ジャンプで空中にいる間true。ジョジョ立ち・ザ・ワールドを空中で発動してもtrueのまま(軌道を変えないため)
-let poseSlideSpeed = 0; // ジョジョ立ち・ザ・ワールド発動時点の速度(地上発動時、この速度から硬化終了までなめらかに減速しながら進む)
+let inAir = false; // ジャンプで空中にいる間true。バーン立ち・ストップを空中で発動してもtrueのまま(軌道を変えないため)
+let poseSlideSpeed = 0; // バーン立ち・ストップ発動時点の速度(地上発動時、この速度から硬化終了までなめらかに減速しながら進む)
 let currentSpeed = 0, currentYawRate = 0;
 let prevSpeed = 0;
 let walkPhase = 0;
@@ -3329,14 +3329,14 @@ for (let i=0;i<MAX_HAROS;i++){
   });
 }
 
-// ？ブロック・ザ・ワールド
-let theWorldCharged = false; // ハロに接触してザ・ワールドが使用可能か
-let theWorldActive = false;  // ザ・ワールド発動中(5秒間)か
-// スマホ等のザ・世界ボタンを、使用可能になるまで非表示にし、可能になったら点滅させる(theWorldChargedが変わるたびに呼ぶ)
+// ？ブロック・ストップ
+let theWorldCharged = false; // ハロに接触してストップが使用可能か
+let theWorldActive = false;  // ストップ発動中(5秒間)か
+// スマホ等のストップボタンを、使用可能になるまで非表示にし、可能になったら点滅させる(theWorldChargedが変わるたびに呼ぶ)
 function updateTetsuButtonState(){
   btnTetsuEl.classList.toggle('ready', theWorldCharged);
 }
-// 序盤の慣らし演出:物資ブロックを1個取得するまでジョジョ立ちは使用不可・ボタンも非表示にする(VS Modeは対象外、常時使用可能)
+// 序盤の慣らし演出:物資ブロックを1個取得するまでバーン立ちは使用不可・ボタンも非表示にする(VS Modeは対象外、常時使用可能)
 let jojoUnlocked = false;
 function updateJojoButtonState(){
   btnJojoEl.classList.toggle('ready', jojoUnlocked);
@@ -3346,7 +3346,7 @@ let theWorldTimer = 0;
 let worldRateMult = 1.0;
 let worldRateMultSetAt = 0;
 let skullSpeedResetAt = 0; // フォーム2中にドクロに触れた瞬間の時刻。ドクロの速度をこの時点から初速で再スタートさせる
-let skullsDefeated = 0; // ジョジョ立ちやフォーム2の被弾で撃破したドクロの数(トロフィー判定用。命中しないまま消えたものは含まない)
+let skullsDefeated = 0; // バーン立ちやフォーム2の被弾で撃破したドクロの数(トロフィー判定用。命中しないまま消えたものは含まない)
 function currentWorldRateMult(){
   if (worldRateMult >= 1.0) return 1.0;
   const recoverSteps = Math.floor((elapsedTime - worldRateMultSetAt) / currentRateStep);
@@ -3357,7 +3357,7 @@ let state = 'normal'; // normal | jumpCharge | air | landing | jojo | tetsuzanko
 let chargeTimer = 0;
 let landTimer = 0;
 let jojoTimer = 0;
-let jojoPoseIndex = -1; // 直近に発動したジョジョ立ちのポーズ番号(発動のたびに0→1→2→0…とループする)
+let jojoPoseIndex = -1; // 直近に発動したバーン立ちのポーズ番号(発動のたびに0→1→2→0…とループする)
 let tzkTimer = 0;
 let fallTimer = 0;
 let fallVX = 0, fallVZ = 0; // 落下開始時点の水平方向の速度(落下中はこれを維持したまま進む)
@@ -3398,7 +3398,7 @@ function updatePart2TeaseBanner(dt){
 }
 
 // ---- チュートリアル(第一部限定。難易度選択画面のチェックボックスでON/OFFできる。デフォルトはON) ----
-// 兵器開発者ヤッサン・ウソツキー博士(👴🏾)からの指示、という体裁のメッセージで案内する
+// 兵器開発者ウソツキー博士(👴🏾)からの指示、という体裁のメッセージで案内する
 const tutorialHintEl = document.getElementById('tutorialHint');
 const TUTORIAL_STEP4_DURATION = 20.0;
 const TUTORIAL_INTRO_DURATION = 10.0; // メッセージ0(導入)の最大表示時間。これが経過するか何らかの操作をすると次へ進む
@@ -3418,7 +3418,7 @@ function startTutorialIntro(){
   tutorialIntroTimer = 0;
   tutorialIntroDuration = TUTORIAL_INTRO_DURATION;
   paused = true; // 10秒経過 or 何らかの操作があるまでゲームを停止させる(演出上の「一時停止」であり、通常のポーズUIは出さない)
-  showTutorialHint('👴🏾私はヤッサン・ウソツキー博士だ。このシミュレーターで君に新モビル兵器の機能テストをしてもらいたい');
+  showTutorialHint('👴🏾私はウソツキー博士だ。このシミュレーターで君に新モビル兵器の機能テストをしてもらいたい');
 }
 // VS Mode専用の導入メッセージ。仕組みはメッセージ0と共通(この間ゲームを停止させ、5秒経過か何らかの操作で終了する)だが、
 // ステップ1〜4のような多段階の判定は行わない一回きりのメッセージにする
@@ -3454,11 +3454,11 @@ function updateTutorial(dt){
     return;
   }
   if (!earnedTrophiesThisRun.has('skull_1')){
-    showTutorialHint('👴🏾火玉ドクロが来たらジョジョスタンドで撃破するんじゃ');
+    showTutorialHint('👴🏾火玉ドクロが来たらバーンスタンドで撃破するんじゃ');
     return;
   }
   if (!earnedTrophiesThisRun.has('first_world')){
-    showTutorialHint('👴🏾ハロにタッチしてザ・世界を発動するんじゃ');
+    showTutorialHint('👴🏾ハロにタッチしてストップを発動するんじゃ');
     return;
   }
   if (tutorialPhase4Timer < 0){
@@ -3487,7 +3487,7 @@ const vsResultEl = document.getElementById('vsResult');
 const vsResultTextEl = document.getElementById('vsResultText');
 const vsResultDetailEl = document.getElementById('vsResultDetail');
 const vsResultBackBtnEl = document.getElementById('vsResultBackBtn');
-// ジョジョ立ちで物資を奪った瞬間、奪われた側のアイコンから奪った側のアイコンへ📦が飛んでいく簡易演出。
+// バーン立ちで物資を奪った瞬間、奪われた側のアイコンから奪った側のアイコンへ📦が飛んでいく簡易演出。
 // 要素を毎回1個生成し、CSSのtransitionでleft/topを目的地へ動かした後、アニメーション終了を待って取り除く
 // ワールド座標(x,y,z)を現在のカメラ視点での画面ピクセル座標に変換する(物資強奪の飛び出しアイコンの発生位置に使う)。
 // カメラの真後ろなど通常起こらない状況の保険として、その場合は画面中央にフォールバックする
@@ -3503,7 +3503,7 @@ function worldToScreenPoint(x, y, z){
     y: clamp((1-(worldToScreenPosScratch.y*0.5+0.5)) * window.innerHeight, 0, window.innerHeight)
   };
 }
-// ジョジョ立ちで物資を奪われた側のキャラクター(胸のあたりの高さ)の画面上の位置を返す
+// バーン立ちで物資を奪われた側のキャラクター(胸のあたりの高さ)の画面上の位置を返す
 function vsCharacterScreenPoint(isPlayer){
   return isPlayer
     ? worldToScreenPoint(pos.x, airY+cur.hipY+TORSO_H*0.5, pos.z)
@@ -3567,8 +3567,8 @@ const goHighscoreEl = document.getElementById('goHighscore');
 const goBestEl = document.getElementById('goBest');
 const goNameEntryEl = document.getElementById('goNameEntry');
 const goNameInputEl = document.getElementById('goNameInput');
-const btnTetsuEl = document.getElementById('btnTetsu'); // スマホ等のザ・世界ボタン(使用可能になるまで非表示、可能になったら点滅させる)
-const btnJojoEl = document.getElementById('btnJojo'); // スマホ等のジョジョボタン(物資ブロックを1個取得するまで非表示)
+const btnTetsuEl = document.getElementById('btnTetsu'); // スマホ等のストップボタン(使用可能になるまで非表示、可能になったら点滅させる)
+const btnJojoEl = document.getElementById('btnJojo'); // スマホ等のバーンボタン(物資ブロックを1個取得するまで非表示)
 const IS_TOUCH_DEVICE = window.matchMedia('(pointer:coarse)').matches; // スマホ等タッチ操作が主のデバイスかどうか(ボタン点滅で足りるため、使用可能トーストを省略する判定に使う)
 const rankingOverlayEl = document.getElementById('rankingOverlay');
 const settingsOverlayEl = document.getElementById('settingsOverlay');
@@ -3771,7 +3771,7 @@ const TROPHIES = {
   skull_1:     'やったか！？',                   // ドクロを1個撃破
   skull_12:    '12個が全滅！？数分経たずにか！', // ドクロを12個撃破
   first_form2: '通常の3倍！',                    // 初めてフォーム2に変身
-  first_world: '刻が見える！',                   // 初めてザ・ワールドを発動
+  first_world: '刻が見える！',                   // 初めてストップを発動
   first_fall:  '重力に魂を引かれた',             // 初めて落下した
   first_hit:   'か、母さーん！',                 // 初めてドクロに直撃された
   last_boss:   'ラストシューティング',           // ラスボスブロックを撃破(第二部)
@@ -3873,7 +3873,7 @@ function updateTrophyToast(dt){
     trophyToastTimer = -1;
   }
 }
-// ジョジョ立ちやフォーム2の被弾でドクロを撃破した際に呼ぶ(命中しないまま消えた場合は呼ばない)
+// バーン立ちやフォーム2の被弾でドクロを撃破した際に呼ぶ(命中しないまま消えた場合は呼ばない)
 function onSkullDefeated(){
   skullsDefeated++;
   if (skullsDefeated >= 1) awardTrophy('skull_1');
@@ -3933,25 +3933,25 @@ let invincibleMode = false; // デバッグ用無敵モード(難易度ボタン
 let vsMode = false; // VS Mode(対CPU)で開始したプレイかどうか
 const VS_TOTAL_BLOCKS = 7;          // フィールドに配置する物資ブロックの総数(通常の第一部は4個)。うちQBLOCK_HIGH_COUNT(3)個は多段ジャンプでしか届かない高さに配置する(applyLv2HighBlocks()をそのまま流用する)
 const VS_MATCH_TIME_LIMIT = 100;    // 秒。経過したら強制的に判定に入る
-const VS_JOJO_DAMAGE = 2;           // ジョジョ立ちを相手にヒットさせたときに減らす体力
-const VS_CPU_JOJO_ENGAGE_MIN = 0.5, VS_CPU_JOJO_ENGAGE_MAX = 1.0; // プレイヤーが射程に入ってからジョジョ立ちを発動するまでのランダム待ち時間(秒)
-const VS_CPU_WORLD_ENGAGE_MIN = 1.0, VS_CPU_WORLD_ENGAGE_MAX = 10.0; // ハロ取得からザ・世界を発動するまでのランダム待ち時間(秒)
+const VS_JOJO_DAMAGE = 2;           // バーン立ちを相手にヒットさせたときに減らす体力
+const VS_CPU_JOJO_ENGAGE_MIN = 0.5, VS_CPU_JOJO_ENGAGE_MAX = 1.0; // プレイヤーが射程に入ってからバーン立ちを発動するまでのランダム待ち時間(秒)
+const VS_CPU_WORLD_ENGAGE_MIN = 1.0, VS_CPU_WORLD_ENGAGE_MAX = 10.0; // ハロ取得からストップを発動するまでのランダム待ち時間(秒)
 const VS_RESPAWN_Y_SAFE = 0; // 盤外に落ちた場合、原点付近まで戻す(中央復帰。ペナルティなし)
 
 let playerResourceCount = 0; // VS Mode中のプレイヤーの物資所持数
 let vsRemainingBlocks = 0;   // フィールドにまだ残っている(どちらも取っていない)物資の数
 let vsMatchTimer = 0;
 let vsMatchOver = false;     // 勝敗が決まり、結果画面を表示中かどうか
-let vsJojoCooldown = 0;      // プレイヤーのジョジョ立ち連打防止タイマー(秒。VS Mode専用)
+let vsJojoCooldown = 0;      // プレイヤーのバーン立ち連打防止タイマー(秒。VS Mode専用)
 const VS_JOJO_COOLDOWN_TIME = 1.0;
 let vsResultCameraTimer = 0; // 勝敗確定後のカメラ演出用タイマー(update(dt)は凍結で止まるため、メインループ側で独立して進める)
 const VS_RESULT_INPUT_LOCK_TIME = 5.0; // 決着直後、連打で「戻る」が誤発動しないよう入力を禁止する秒数(vsResultCameraTimerを共用する)
 // CPUの難易度調整。初対戦時、または前回敗北(引き分け含む)時はCPUを弱くする。前回勝利していた場合のみ制限なし(通常仕様)
 let vsEasyMode = false;
 const VS_EASY_FORM2_SPEED_MULT = 2; // 易しいモード中、CPUのフォーム2速度倍率(通常はFORM2_SPEED_MULT=3)
-const VS_EASY_ACTION_UNLOCK_COUNT = 2; // 易しいモード中、CPUがザ・世界/ジョジョ立ちを使い始めるのに必要な「プレイヤー自身の使用回数」
-let playerVsJojoCount = 0;  // 今回のVS試合でプレイヤーがジョジョ立ちを発動した回数
-let playerVsWorldCount = 0; // 今回のVS試合でプレイヤーがザ・世界を発動した回数
+const VS_EASY_ACTION_UNLOCK_COUNT = 2; // 易しいモード中、CPUがストップ/バーン立ちを使い始めるのに必要な「プレイヤー自身の使用回数」
+let playerVsJojoCount = 0;  // 今回のVS試合でプレイヤーがバーン立ちを発動した回数
+let playerVsWorldCount = 0; // 今回のVS試合でプレイヤーがストップを発動した回数
 
 // CPU(敵機)の状態。プレイヤー本体とは完全に独立した、簡易な物理・AIシステムを持つ
 const cpu = {
@@ -3959,11 +3959,11 @@ const cpu = {
   hp: 5, form: 1, form2Timer: 0,
   damageInvincibleTimer: -1, // プレイヤーと同じ「被弾後2秒無敵」をCPU側にも設ける
   resourceCount: 0,
-  worldCharged: false,   // ハロに触れてザ・世界が使用可能か
+  worldCharged: false,   // ハロに触れてストップが使用可能か
   worldActive: false, worldTimer: 0,
-  worldEngageTimer: -1,  // ハロ取得後、ザ・世界発動までのカウントダウン(-1は未計測)
-  jojoActive: false, jojoTimer: 0,     // ジョジョ立ちの決めポーズ中(この間は移動しない)
-  jojoEngageTimer: -1,   // プレイヤーが射程に入ってからジョジョ立ち発動までのカウントダウン(-1は未計測)
+  worldEngageTimer: -1,  // ハロ取得後、ストップ発動までのカウントダウン(-1は未計測)
+  jojoActive: false, jojoTimer: 0,     // バーン立ちの決めポーズ中(この間は移動しない)
+  jojoEngageTimer: -1,   // プレイヤーが射程に入ってからバーン立ち発動までのカウントダウン(-1は未計測)
   targetBlock: null,     // 現在向かっている物資ブロック
   // 物資ブロック取得用の簡易ジャンプ物理(プレイヤーのairY/vyと同じ重力定数JUMP_GRAVITYを流用する)
   airY: 0, vy: 0, jumpsUsed: 0, jumpForHighBlock: false, // jumpForHighBlock: 今のジャンプが高所ブロック用(2段ジャンプが必要)かどうか
@@ -4102,9 +4102,9 @@ function demoAvoidSlitFall(){
   if (isOverSlit(aheadX, aheadZ)) pressJump();
 }
 
-// 下手なAIの入力(方向キーはランダムに切り替え、ジャンプ・ジョジョ立ちも時々押すだけの単純な挙動)
+// 下手なAIの入力(方向キーはランダムに切り替え、ジャンプ・バーン立ちも時々押すだけの単純な挙動)
 function updateDemoAI(dt){
-  // ハロに接触してザ・世界が使用可能になったら、すぐ発動する(通常のランダム挙動より優先)
+  // ハロに接触してストップが使用可能になったら、すぐ発動する(通常のランダム挙動より優先)
   if (theWorldCharged) pressTetsuzanko();
   demoAvoidSlitFall(); // ランダム移動・ブロック直行のどちらの局面でもスリット転落だけは常に回避する
 
@@ -4184,7 +4184,7 @@ function currentSkullSpawnRadius(s){
 function skullRate(t){
   const steps = Math.floor(t/currentRateStep);
   let rate = (1/SKULL_BASE_INTERVAL) * Math.pow(SKULL_RATE_MULT, steps);
-  rate *= currentWorldRateMult(); // ザ・ワールド発動直後は半減し、時間経過でまた回復していく
+  rate *= currentWorldRateMult(); // ストップ発動直後は半減し、時間経過でまた回復していく
   return rate;
 }
 function scheduleNextSkull(s){
@@ -4383,7 +4383,7 @@ function updateZakuWalkAnim(z, dt){
 function updateZakus(dt){
   if (difficulty === 1) return; // 第一部限定で無し(第二部・第三部は出現する)
   if (qblocksCollected < 2) return; // 序盤の慣らし演出:物資ブロックを2個取得するまで敵ザクは出現しない
-  if (theWorldActive || state === 'victory') return; // ザ・世界中・ラスボス撃破演出中は出現・移動・タックル判定とも停止する(他の敵と同様)
+  if (theWorldActive || state === 'victory') return; // ストップ中・ラスボス撃破演出中は出現・移動・タックル判定とも停止する(他の敵と同様)
 
   const spawnInterval = ((difficulty === 3) ? ZAKU_SPAWN_INTERVAL * 0.5 : ZAKU_SPAWN_INTERVAL) / zakuSpawnFreqMult;
   zakuSpawnTimer += dt;
@@ -4486,7 +4486,7 @@ function separateZakus(){
   }
 }
 
-// ---- 裏技: ジョジョ立ちのボタンを5秒間離さず押し続けると自動発動する秘技(1プレイにつき1回だけ使える) ----
+// ---- 裏技: バーン立ちのボタンを5秒間離さず押し続けると自動発動する秘技(1プレイにつき1回だけ使える) ----
 // 発動後15秒間、半径30mのオーラをまとって無敵+移動速度5倍になり、オーラに触れたドクロ・敵ザク・ラスボスを爆破する。ボディは輝く白になる。
 // 2回目に使おうとすると(既に使用済みの状態でもう一度5秒押し続けると)、代わりに自機が爆散してGAME OVERになる
 const HIDDEN_AURA_RADIUS = 30.0;
@@ -4553,7 +4553,7 @@ function updateHiddenAura(dt){
       removeZaku(i);
     }
   }
-  // ラスボスにも有効(ジョジョ立ちのヒットと同じ処理)
+  // ラスボスにも有効(バーン立ちのヒットと同じ処理)
   if (bossActive && bossFlashTimer < 0){
     const bd = Math.hypot(bossX-pos.x, currentBossY()-centerY, bossZ-pos.z);
     if (bd <= HIDDEN_AURA_RADIUS){
@@ -4593,7 +4593,7 @@ function startGame(diff, invincible, vs){
   elapsedTime = 0;
   distanceTraveled = 0;
   if (vsMode){
-    jojoUnlocked = true; // VS Modeはジョジョ立ちが対戦の核となる要素のため、序盤の解禁演出の対象外で常時使用可能にする
+    jojoUnlocked = true; // VS Modeはバーン立ちが対戦の核となる要素のため、序盤の解禁演出の対象外で常時使用可能にする
     updateJojoButtonState();
     startVsMatch(); // ドクロは湧かせず、代わりにCPU・VS用HUDを初期化する(詳細は「VS Mode」節を参照)
     // 自機・CPUの開始位置を決めるstartVsMatch()の「後」に呼ぶ必要がある(先に呼ぶと、導入メッセージで停止している間
@@ -4758,7 +4758,7 @@ function pressMoveKey(key){
   if (vsMatchFrozen()) return;
   keysDown[key] = true;
 
-  // ポーズ中に移動系キーを押すと自動解除(ジョジョ立ちは操作受付禁止時間中を除く。空中発動時は空中姿勢に戻る)
+  // ポーズ中に移動系キーを押すと自動解除(バーン立ちは操作受付禁止時間中を除く。空中発動時は空中姿勢に戻る)
   if (state==='tetsuzanko' || (state==='jojo' && jojoTimer >= JOJO_INPUT_LOCK_TIME)) state = inAir ? 'air' : 'normal';
 
   if (key==='ArrowDown'){
@@ -4769,7 +4769,7 @@ function releaseMoveKey(key){ keysDown[key] = false; }
 
 function pressJump(){
   if (vsMatchFrozen()) return;
-  // ポーズ中にJを押すと自動解除、そのまま地上ならジャンプ開始(ジョジョ立ちは操作受付禁止時間中を除く)
+  // ポーズ中にJを押すと自動解除、そのまま地上ならジャンプ開始(バーン立ちは操作受付禁止時間中を除く)
   if (state==='tetsuzanko' || (state==='jojo' && jojoTimer >= JOJO_INPUT_LOCK_TIME)) state = inAir ? 'air' : 'normal';
   if (state==='normal' && !inAir){
     state = 'jumpCharge';
@@ -4798,12 +4798,12 @@ function performMultiJump(){
 }
 
 function pressJojo(){
-  if (!jojoUnlocked) return; // 物資ブロックを1個取得するまでジョジョ立ちは使用できない(VS ModeはstartGame()で常時trueにしてあるため対象外)
+  if (!jojoUnlocked) return; // 物資ブロックを1個取得するまでバーン立ちは使用できない(VS ModeはstartGame()で常時trueにしてあるため対象外)
   if (vsMatchFrozen()) return;
-  // VS Mode専用: ジョジョ立ちの連打(=再発動での連続ヒット)を防ぐため、発動から1秒間は再発動できない。
-  // ジョジョ立ち以外の操作(移動・ジャンプ・鉄山靠)には一切影響しない
+  // VS Mode専用: バーン立ちの連打(=再発動での連続ヒット)を防ぐため、発動から1秒間は再発動できない。
+  // バーン立ち以外の操作(移動・ジャンプ・鉄山靠)には一切影響しない
   if (vsMode && vsJojoCooldown > 0) return;
-  // 地上(normal)・ジャンプ中(air)・ジョジョ立ち中(再発動)のいずれかから発動できる
+  // 地上(normal)・ジャンプ中(air)・バーン立ち中(再発動)のいずれかから発動できる
   if (state!=='normal' && state!=='jojo' && state!=='air') return;
   // 操作受付禁止時間(JOJO_INPUT_LOCK_TIME)中は無反応。それ以降はポーズ中でも再発動(やり直し)できる
   if (state==='jojo' && jojoTimer < JOJO_INPUT_LOCK_TIME) return;
@@ -4832,7 +4832,7 @@ function pressJojo(){
     if (s.phase === 'flying' || s.phase === 'falling'){
       const d = Math.hypot(s.x-center.x, s.y-center.y, s.z-center.z);
       if (d <= currentJojoRange()){
-        triggerDigestCapture('jojo_kill'); // ハイライトダイジェスト用(ジョジョ立ちでの撃破に限る。フォーム2の接触撃破は対象外)
+        triggerDigestCapture('jojo_kill'); // ハイライトダイジェスト用(バーン立ちでの撃破に限る。フォーム2の接触撃破は対象外)
         spawnExplosion(s.x, s.y, s.z);
         playExplosionSound();
         resetSkull(s);
@@ -4841,7 +4841,7 @@ function pressJojo(){
     }
   }
 
-  // ラスボスブロックの撃破判定(タッチではなくジョジョ立ちのヒットで撃破。何回目のヒットでも判定は同じで、
+  // ラスボスブロックの撃破判定(タッチではなくバーン立ちのヒットで撃破。何回目のヒットでも判定は同じで、
   // 何回当てれば撃破になるかだけが難易度で変わる(第一部1回・第二部2回・第三部3回。詳細はhitBoss()を参照))
   if (bossActive && bossFlashTimer < 0){
     const bd = Math.hypot(bossX-center.x, currentBossY()-center.y, bossZ-center.z);
@@ -4850,7 +4850,7 @@ function pressJojo(){
     }
   }
 
-  // 敵ザクの撃破判定(効果範囲内にいれば、降下中・突進中どちらでもジョジョ立ちのヒットで撃破できる)
+  // 敵ザクの撃破判定(効果範囲内にいれば、降下中・突進中どちらでもバーン立ちのヒットで撃破できる)
   for (let i=zakus.length-1;i>=0;i--){
     const z = zakus[i];
     const zd = Math.hypot(z.x-center.x, zakuWorldY(z)-center.y, z.z-center.z);
@@ -4870,7 +4870,7 @@ function pressJojo(){
 
 function pressTetsuzanko(){
   if (vsMatchFrozen()) return;
-  // ザ・ワールド:ハロに接触して解禁するまで発動不可(初期状態では受け付けない)。地上・ジャンプ中どちらでも発動できる
+  // ストップ:ハロに接触して解禁するまで発動不可(初期状態では受け付けない)。地上・ジャンプ中どちらでも発動できる
   if ((state==='normal' || state==='air') && theWorldCharged){
     theWorldCharged = false;
     updateTetsuButtonState();
@@ -4886,7 +4886,7 @@ function pressTetsuzanko(){
 const diffKeyDownAt = {}; // '1'/'2'キーを押した時刻(離した瞬間に押していた時間を測り、3秒以上なら無敵モードで開始する)
 let diffPressActive = false; // 無敵モード判定の長押し中かどうか(キーボード・タッチ共通)。押している間は自動デモの開始タイマーを進めない
 
-// 裏技: ジョジョ立ちのボタン(Jキー/ジョジョボタン)を5秒間離さずに押し続けると、その時点で自動的に発動する
+// 裏技: バーン立ちのボタン(Jキー/バーンボタン)を5秒間離さずに押し続けると、その時点で自動的に発動する
 let jojoHoldTimer = null;
 let jojoHoldCharging = false; // 長押し中(頭部の地味な点滅表示に使う)
 let jojoHoldStartAt = 0;
@@ -4906,7 +4906,7 @@ function cancelJojoHoldTimer(){
   jojoChargeGlowMat.opacity = 0;
   if (jojoHoldTimer){ clearTimeout(jojoHoldTimer); jojoHoldTimer = null; }
 }
-// ジョジョ立ちの長押し中、頭部だけを地味な周期で点滅させる(裏技を匂わせる、控えめな視覚フィードバック)
+// バーン立ちの長押し中、頭部だけを地味な周期で点滅させる(裏技を匂わせる、控えめな視覚フィードバック)
 function updateJojoChargeGlow(){
   if (!jojoHoldCharging){ jojoChargeGlowMat.opacity = 0; return; }
   const t = (performance.now() - jojoHoldStartAt) / 1000;
@@ -5084,7 +5084,7 @@ wireActionButton('btnJump', pressJump);
 wireActionButton('btnJojo', pressJojo);
 wireActionButton('btnTetsu', pressTetsuzanko);
 
-// 裏技: ジョジョボタンを5秒間離さずに押し続けると自動発動する(Jキーと共通のタイマーで判定)
+// 裏技: バーンボタンを5秒間離さずに押し続けると自動発動する(Jキーと共通のタイマーで判定)
 (function(){
   const el = document.getElementById('btnJojo');
   el.addEventListener('touchstart', armJojoHoldTimer, { passive:true });
@@ -5346,10 +5346,10 @@ renderer.domElement.addEventListener('touchcancel', camTouchEnd);
 // ============================================================
 // ブラウザ標準のGamepad APIをフレームごとにポーリングする方式。キーボード・タッチと同じ入力関数
 // (pressMoveKey/releaseMoveKey/pressJump/pressJojo/pressTetsuzanko等)をそのまま呼び出すため、
-// 移動・ジャンプ・ジョジョ立ち・ザ・世界などのゲームロジック側は一切変更しない。
+// 移動・ジャンプ・バーン立ち・ストップなどのゲームロジック側は一切変更しない。
 // 標準マッピング(Xbox/PlayStation系コントローラーで概ね共通)を前提とする:
 //   左スティック=移動(8方向バーチャルスティックと同じ量子化) / 右スティック=視点操作(ドラッグ相当)
-//   ボタン0(A/×)=ジャンプ  ボタン2(X/□)=ジョジョ立ち  ボタン3(Y/△)=ザ・世界  ボタン9(Start/Options)=ポーズ
+//   ボタン0(A/×)=ジャンプ  ボタン2(X/□)=バーン立ち  ボタン3(Y/△)=ストップ  ボタン9(Start/Options)=ポーズ
 //   ボタン6/7(L2/R2)=ズームアウト/イン(ホイール相当)
 // キーボード・タッチ操作とはいつでも併用でき、互いに干渉しない
 const GP_DEADZONE = 0.25; // スティックの遊び(倒し始めのドリフト・誤入力防止)
@@ -5625,7 +5625,7 @@ function updateLocomotion(dt, allowInput){
   const targetTiltZ = clamp(currentYawRate/effTurn, -1, 1) * TILT_MAX_LR;
   cur.tiltX += (targetTiltX - cur.tiltX) * TILT_LERP;
   cur.tiltZ += (targetTiltZ - cur.tiltZ) * TILT_LERP;
-  cur.bodyYawOffset += (0 - cur.bodyYawOffset) * TILT_LERP; // ジョジョ立ちポーズ2の体の向きのずれを通常時は戻す
+  cur.bodyYawOffset += (0 - cur.bodyYawOffset) * TILT_LERP; // バーン立ちポーズ2の体の向きのずれを通常時は戻す
 }
 
 // ---- 顔の向き:出現中の最も近いドクロ(ハロがいればハロを優先)を自然に追従 ----
@@ -5736,9 +5736,9 @@ function enterFalling(isSlit){
   awardTrophy('first_fall');
 }
 
-// ジャンプ中の空中物理(高度・水平慣性・着地判定)。stateがair以外(ジョジョ立ち・ザ・ワールド)でも
+// ジャンプ中の空中物理(高度・水平慣性・着地判定)。stateがair以外(バーン立ち・ストップ)でも
 // inAirの間は毎フレーム呼ばれ続けるため、空中でこれらを発動しても落下の軌道は変化しない
-// ただし、ジョジョ立ちの硬化中(発動から0.3秒間)だけは例外的に落下(鉛直方向の運動)を停止する。
+// ただし、バーン立ちの硬化中(発動から0.3秒間)だけは例外的に落下(鉛直方向の運動)を停止する。
 // 硬化が解けた瞬間、鉛直速度を0にリセットしてそこから改めて落下を始める
 let jojoAirWasFrozen = false;
 function updateAirPhysics(dt){
@@ -5770,14 +5770,14 @@ function updateAirPhysics(dt){
   }
 }
 
-// VS Modeでプレイヤーが完全凍結中かどうか(勝敗確定後、またはCPUのザ・世界発動中で自分は未発動の場合)。
+// VS Modeでプレイヤーが完全凍結中かどうか(勝敗確定後、またはCPUのストップ発動中で自分は未発動の場合)。
 // update()だけでなく、その直後に呼ばれるupdateJumpThruster/updateHoverThrustも合わせて止めるために関数化している
 function isVsPlayerFrozen(){
   return vsMode && (vsMatchOver || (cpu.worldActive && !theWorldActive));
 }
 function update(dt){
-  if (vsJojoCooldown > 0) vsJojoCooldown -= dt; // VS Modeのジョジョ立ち連打防止タイマー(凍結中でも減らしておく)
-  if (isVsPlayerFrozen()) return; // ザ・世界の発動操作(pressTetsuzanko)自体はこの関数を経由しない別の入力関数のため、凍結中でも常に受け付けられる
+  if (vsJojoCooldown > 0) vsJojoCooldown -= dt; // VS Modeのバーン立ち連打防止タイマー(凍結中でも減らしておく)
+  if (isVsPlayerFrozen()) return; // ストップの発動操作(pressTetsuzanko)自体はこの関数を経由しない別の入力関数のため、凍結中でも常に受け付けられる
 
   if (inAir) updateAirPhysics(dt);
 
@@ -5888,7 +5888,7 @@ function update(dt){
 
     // 急停止せず、発動時点の速度から硬化時間(JOJO_INPUT_LOCK_TIME)をかけてなめらかに減速しながら進行方向へ進む
     // (空中で発動した場合は、水平方向の移動はupdateAirPhysicsのairTakeoffSpeedがそのまま担当するため、ここでは何もしない=軌道は変わらない)
-    // 第三部限定: 常に前進し続ける仕様のため、ジョジョ立ち中も減速させず発動時点の速度を維持したまま進み続ける
+    // 第三部限定: 常に前進し続ける仕様のため、バーン立ち中も減速させず発動時点の速度を維持したまま進み続ける
     if (!inAir){
       if (difficulty === 3){
         currentSpeed = poseSlideSpeed;
@@ -5948,7 +5948,7 @@ function update(dt){
       currentYawRate = 0;
     }
 
-    // 硬化時間(TZK_T)が終わったら自動でポーズ解除する(ジョジョ立ちと同じルール。入力の有無を問わない。
+    // 硬化時間(TZK_T)が終わったら自動でポーズ解除する(バーン立ちと同じルール。入力の有無を問わない。
     // 以前はキー入力がある場合のみ解除しており、第三部のように↑キー入力が実質発生しない状況では
     // ポーズが解除されず前進が再開しない不具合があったため、無条件の解除に統一した)
     if (state === 'tetsuzanko' && tzkTimer >= TZK_T){
@@ -5956,7 +5956,7 @@ function update(dt){
     }
 
   } else if (state === 'falling'){
-    // 地面の外に落下中。ザ・世界のポーズを取ったまま、落下開始時点の水平方向の速度を維持しつつ自由落下する
+    // 地面の外に落下中。ストップのポーズを取ったまま、落下開始時点の水平方向の速度を維持しつつ自由落下する
     vy -= GRAVITY*dt;
     airY += vy*dt;
     pos.x += fallVX*dt;
@@ -5988,7 +5988,7 @@ function update(dt){
     }
 
   } else if (state === 'victory'){
-    // ラスボス撃破演出。ジョジョ立ちの決めポーズ(3種類からランダムに選ばれたもの)を取ったまま静止する
+    // ラスボス撃破演出。バーン立ちの決めポーズ(3種類からランダムに選ばれたもの)を取ったまま静止する
     const jojoPose = JOJO_POSES[victoryPoseIndex];
     cur.headYaw = converge(cur.headYaw, jojoPose.headYaw, dt, JOJO_T);
     cur.bodyYawOffset = converge(cur.bodyYawOffset, jojoPose.bodyYawOffset, dt, JOJO_T);
@@ -6225,7 +6225,7 @@ function updateSkullSlot(s, dt){
 function updateEnemy(dt){
   if (vsMode) return; // VS Modeはドクロを出現させない仕様のため(startGame側でskulls[0]を能動的に有効化しないだけでは、このループが自動的に有効化してしまうため明示的にガードする)
   if (qblocksCollected < 1) return; // 序盤の慣らし演出:物資ブロックを1個取得するまでドクロは出現しない
-  if (theWorldActive || state === 'victory') return; // ザ・ワールド中・ラスボス撃破演出中はドクロも静止(移動・出現・命中判定とも停止)
+  if (theWorldActive || state === 'victory') return; // ストップ中・ラスボス撃破演出中はドクロも静止(移動・出現・命中判定とも停止)
   let activeCount = 1;
   if (elapsedTime >= SKULL_TRIPLE_UNLOCK_TIME) activeCount = 3;
   else if (elapsedTime >= SKULL_MULTI_UNLOCK_TIME) activeCount = 2;
@@ -6413,10 +6413,10 @@ function updateQBlockTargeting(){
 }
 
 // ============================================================
-// プレイヤーの見た目(通常色/フォーム2/ザ・ワールド使用可能中)を一元管理
-// フォーム2とザ・ワールド使用可能中は互いに独立して同時に成立しうるため、
-// 体色はザ・ワールド使用可能中を優先して表示し、フォーム状態は頭部のブレードアンテナ(フォーム2)・
-// 3本角(ザ・ワールド使用可能中)の有無でそれぞれ独立に判別できるようにする
+// プレイヤーの見た目(通常色/フォーム2/ストップ使用可能中)を一元管理
+// フォーム2とストップ使用可能中は互いに独立して同時に成立しうるため、
+// 体色はストップ使用可能中を優先して表示し、フォーム状態は頭部のブレードアンテナ(フォーム2)・
+// 3本角(ストップ使用可能中)の有無でそれぞれ独立に判別できるようにする
 // ============================================================
 // ダメージ表現: 黒いシミの代わりに、ライフが減るほどボディ色のRGB各色を初期値の15%ずつ下げて黒っぽくする
 // (満タンからの不足ライフ1につき15%。回復すればその分明るさも元に戻る)
@@ -6429,7 +6429,7 @@ function applyDamageDarken(hex){
   const b = Math.round((hex&0xff)*factor);
   return (r<<16)|(g<<8)|b;
 }
-// 裏技のオーラ・ジョジョ立ちの点滅を除いた、通常時のボディ色(フォーム2・ザ・世界使用可能中・第三部・ダメージ状態を反映)
+// 裏技のオーラ・バーン立ちの点滅を除いた、通常時のボディ色(フォーム2・ストップ使用可能中・第三部・ダメージ状態を反映)
 function normalBodyColor(){
   const base = theWorldCharged ? THE_WORLD_READY_COLOR : (playerForm===2 ? FORM2_COLOR : (difficulty===3 ? PART3_FORM1_COLOR : COL_BODY));
   return applyDamageDarken(base);
@@ -6472,7 +6472,7 @@ const FORM2_WARNING_BLINK_PERIOD = 0.3; // 点滅の周期(秒)。ピンク⇔�
 function updateForm2(dt){
   if (playerForm !== 2) return;
   if (form2Infinite) return; // 全？ブロック取得後は時間経過による自動解除を行わない(ドクロに当たった場合のみフォーム1に戻る)
-  if (theWorldActive) return; // ザ・世界発動中は、ドクロ等と同様にフォーム2の残り時間も進行を止める
+  if (theWorldActive) return; // ストップ発動中は、ドクロ等と同様にフォーム2の残り時間も進行を止める
   form2Timer += dt;
   // 解除の5秒前から、ピンク(フォーム2色)と元の色(解除後に戻る色)を交互に点滅させて警告する
   // (裏技のオーラ点滅中はそちらの点滅を優先し、ここでは上書きしない)
@@ -6516,7 +6516,7 @@ const QBLOCK_SHATTER_FACES = [ // BoxGeometryの6面ぶんの向き(法線方向
   { dir:[0,0,1],  rot:[0, 0, 0] },
   { dir:[0,0,-1], rot:[0, Math.PI, 0] }
 ];
-// 分解した6枚のパネルは、取得したブロック自身が使っていたMaterial(通常/スペシャル、ザ・世界中の反転状態も含む)を
+// 分解した6枚のパネルは、取得したブロック自身が使っていたMaterial(通常/スペシャル、ストップ中の反転状態も含む)を
 // そのまま共有して見た目を合わせる。ジオメトリ・Materialとも他のブロックと共用のままなので、寿命が切れても
 // disposeせず、シーンから外すだけにする(通常のパーティクル使い回しプールの対象にはしない)
 function spawnQBlockShatter(x, y, z, material){
@@ -6593,10 +6593,10 @@ function updateQBlockPickupFx(dt){
 }
 
 // ============================================================
-// ？ブロック・ザ・ワールド
+// ？ブロック・ストップ
 // ============================================================
 function updateQBlock(dt){
-  if (!inAir) return; // ジャンプ中(空中)のみ、つつき判定を行う(ジョジョ立ち・ザ・ワールドを空中発動していても判定する)
+  if (!inAir) return; // ジャンプ中(空中)のみ、つつき判定を行う(バーン立ち・ストップを空中発動していても判定する)
   const sizeMult = hiddenAuraTimer >= 0 ? HIDDEN_AURA_BODY_SCALE : 1; // 裏技のオーラで巨大化中は、実際の見た目の大きさに合わせて当たり判定も拡大する
   const headY = airY + CHAR_HEIGHT*sizeMult; // ロボットの頭頂の高さ(足元はairY)
   const squareHalf = QBLOCK_SIZE/2*sizeMult; // VS Modeは対CPUとの公平性のため、従来通りの正方形判定のまま
@@ -6637,7 +6637,7 @@ function updateQBlock(dt){
       continue;
     }
     qblocksCollected++;
-    if (qblocksCollected === 1 && !jojoUnlocked){ jojoUnlocked = true; updateJojoButtonState(); } // 1個目の取得でジョジョ立ちを解禁する(ドクロもこのタイミングでupdateEnemy側から出現し始める)
+    if (qblocksCollected === 1 && !jojoUnlocked){ jojoUnlocked = true; updateJojoButtonState(); } // 1個目の取得でバーン立ちを解禁する(ドクロもこのタイミングでupdateEnemy側から出現し始める)
     if (qblocksCollected === SPECIAL_QBLOCK_REVEAL_COUNT) revealSpecialQBlock(); // 第二部・第三部限定(内部でdifficultyを判定)
     if (qblocksCollected === qblockTotalCount - 1) revealLastSpecialQBlock(); // 第三部限定: 残り1個になったら、それを2個目のスペシャルブロックに変える
     // 6個目以降の取得毎に敵ザクの出現頻度を倍にする(第一部はそもそも敵ザクが出現しないため実質無関係)。
@@ -6825,7 +6825,7 @@ function activateTheWorld(){
   theWorldTimer = 0;
   worldRateMult = 0.5; // 発動の瞬間、ドクロの頻度・速度を半減(以後は時間経過で回復していく)
   worldRateMultSetAt = elapsedTime;
-  theWorldBannerEl.textContent = 'ザ・世界 発動中!';
+  theWorldBannerEl.textContent = 'ストップ 発動中!';
   theWorldBannerEl.style.display = 'block';
   theWorldCountdownEl.style.display = 'block';
   invertWorldColors(true);
@@ -6871,7 +6871,7 @@ function currentHaroSpawnArc(){
   // 背面カメラ設定(視界自動回転オン)でないときは出現角度を広げる
   return cameraAutoRotate ? HARO_SPAWN_ARC : HARO_SPAWN_ARC_WIDE;
 }
-// ハロが停止すべきかどうか。通常プレイはプレイヤーのザ・世界のみ見る。VS Modeは双方の状態を見て、
+// ハロが停止すべきかどうか。通常プレイはプレイヤーのストップのみ見る。VS Modeは双方の状態を見て、
 // 片方だけ発動中なら停止、両方発動中(相殺して双方動ける状態)または両方未発動なら通常通り動く
 function haroShouldFreeze(){
   if (!vsMode) return theWorldActive;
@@ -6879,7 +6879,7 @@ function haroShouldFreeze(){
 }
 function updateHaroSlot(s, dt){
   if (s.phase === 'idle'){
-    if (haroShouldFreeze()) return; // ザ・世界中は周期カウンタも停止
+    if (haroShouldFreeze()) return; // ストップ中は周期カウンタも停止
     s.timer += dt;
     if (s.timer >= currentHaroCycle()){
       s.timer = 0;
@@ -6924,7 +6924,7 @@ function updateHaroSlot(s, dt){
 
   } else if (s.phase === 'flying'){
     if (!haroShouldFreeze()){
-      // ザ・世界中は静止(移動・タイマー進行を停止)。それ以外は通常通り進行
+      // ストップ中は静止(移動・タイマー進行を停止)。それ以外は通常通り進行
       s.flightT += dt;
       const f = clamp(s.flightT/s.flightDur, 0, 1);
       s.x = s.startX + (s.targetX-s.startX)*f;
@@ -6966,20 +6966,20 @@ function updateHaroSlot(s, dt){
       s.phase = 'idle';
       s.mesh.visible = false;
       s.shadowMesh.visible = false;
-      s.timer = currentHaroCycle(); // すぐ次のフレームで新たに出現させる(ザ・ワールド中はそちらの停止ルールが優先される)
+      s.timer = currentHaroCycle(); // すぐ次のフレームで新たに出現させる(ストップ中はそちらの停止ルールが優先される)
       return;
     }
 
-    // 飛行中(ザ・ワールド中の静止状態を含む)は毎フレーム当たり判定を行う
+    // 飛行中(ストップ中の静止状態を含む)は毎フレーム当たり判定を行う
     // 判定は水平距離(XZ)のみで行う。3D距離だと、着地してつぶれている瞬間(地面付近まで低くなる)は
     // プレイヤーの胴体中心(かなり高い位置)から離れすぎて接触扱いにならないバグがあったため
     const hitDist = Math.hypot(s.x-pos.x, s.z-pos.z);
     if (hitDist <= HARO_HIT_RADIUS){
-      // 発動条件の交換:ハロへの接触はザ・ワールドを使用可能にする(フォーム2への変身ではない)
+      // 発動条件の交換:ハロへの接触はストップを使用可能にする(フォーム2への変身ではない)
       theWorldCharged = true;
       updateTetsuButtonState();
       if (!IS_TOUCH_DEVICE){ // スマホ等はボタンの点滅で使用可能を示すため、このトーストは出さない
-        theWorldBannerEl.textContent = 'ザ・世界 使用可能!';
+        theWorldBannerEl.textContent = 'ストップ 使用可能!';
         theWorldBannerEl.style.display = 'block';
       }
       playChargeSound();
@@ -6995,7 +6995,7 @@ function updateHaroSlot(s, dt){
       const cpuHitDist = Math.hypot(s.x-cpu.x, s.z-cpu.z);
       if (cpuHitDist <= HARO_HIT_RADIUS){
         cpu.worldCharged = true;
-        // 「ハロをとったらザ・世界を1〜10秒以内に発動する」というCPUの行動をここでカウントダウン開始する
+        // 「ハロをとったらストップを1〜10秒以内に発動する」というCPUの行動をここでカウントダウン開始する
         cpu.worldEngageTimer = VS_CPU_WORLD_ENGAGE_MIN + Math.random()*(VS_CPU_WORLD_ENGAGE_MAX-VS_CPU_WORLD_ENGAGE_MIN);
         playChargeSound();
         cpu.hp = Math.min(PLAYER_MAX_LIFE, cpu.hp + 1); // プレイヤーと同じくハロ取得で体力1回復
@@ -7050,9 +7050,9 @@ const DIGEST_CAM_PITCH_FROM_DRAMATIC = -30*D2R; // 通常プレイでは見ら�
 const DIGEST_CAM_PITCH_FROM_MODEST = -10*D2R;   // 地面に埋まりやすい状況では控えめな角度にする
 const DIGEST_CAM_DIST_NEAR = 16, DIGEST_CAM_DIST_FAR = 65;
 
-let digestClockNow = 0;           // 記録専用の時計(ラスボス演出中・ザ・世界中でも止めない。elapsedTimeとは別物)
+let digestClockNow = 0;           // 記録専用の時計(ラスボス演出中・ストップ中でも止めない。elapsedTimeとは別物)
 let digestRingBuffer = [];        // 直近DIGEST_PRE_ROLL秒ぶんの記録(常時更新)
-let digestEffectRingBuffer = [];  // 直近の効果イベント(ジョジョドーム・爆発)の記録。フレームと同じ考え方でリングバッファにする
+let digestEffectRingBuffer = [];  // 直近の効果イベント(バーンドーム・爆発)の記録。フレームと同じ考え方でリングバッファにする
 let digestPendingCaptures = [];   // 確定待ち(post-roll記録中)のキャプチャジョブ
 let digestCapturedClips = {};     // イベントID→{ eventId, frames, effects }
 let digestBestScore = {};         // イベントID→ここまでの最高スコア(「一番◯◯だった瞬間」系のイベント専用)
@@ -7101,7 +7101,7 @@ function digestCaptureFrame(){
     rArmHip: cur.rArmHip, rArmElbow: cur.rArmElbow, rArmSpread: cur.rArmSpread,
     lArmHip: cur.lArmHip, lArmElbow: cur.lArmElbow, lArmSpread: cur.lArmSpread,
     charVisible: characterRoot.visible,
-    worldActive: theWorldActive, // ザ・世界中のネガポジ反転を再生時にも再現するため
+    worldActive: theWorldActive, // ストップ中のネガポジ反転を再生時にも再現するため
     state: state, inAir: inAir, currentSpeed: currentSpeed, // 第三部の地上バーニア(updateHoverThrust)の条件判定に必要
     // ドクロ・ハロは固定枠のプールなので、枠の対応を保つためnullで穴埋めして記録する
     skulls: skulls.map(s => s.group.visible ? { x:s.x, y:s.y, z:s.z, rotY:s.group.rotation.y } : null),
@@ -7112,7 +7112,7 @@ function digestCaptureFrame(){
   };
 }
 
-// ジョジョ立ちのドーム・爆発エフェクトの発生を記録する(showJojoDome/spawnExplosionから呼ばれる)。
+// バーン立ちのドーム・爆発エフェクトの発生を記録する(showJojoDome/spawnExplosionから呼ばれる)。
 // パーティクルそのものは記録せず、再生時に同じ発生関数をもう一度呼んで「その場で演算」し直す方式にする
 function digestLogEffect(type, x, y, z){
   const ef = { t: digestClockNow, type, x, y, z };
@@ -7213,7 +7213,7 @@ function applyDigestFrame(frame, dt){
   characterRoot.visible = frame.charVisible;
   applyPose();
   updateShadow();
-  invertWorldColors(frame.worldActive); // ザ・世界中のネガポジ反転を再現する
+  invertWorldColors(frame.worldActive); // ストップ中のネガポジ反転を再現する
   state = frame.state; inAir = frame.inAir; currentSpeed = frame.currentSpeed;
   updateHoverThrust(dt); // 第三部限定の地上バーニア(条件判定に上記のstate/inAir/currentSpeedを使う)
 
@@ -7258,7 +7258,7 @@ function findDigestFrame(clip, localT){
   return frame;
 }
 
-// クリップに記録された効果イベント(ジョジョドーム・爆発)のうち、現在時刻までに発生したものを発火させる
+// クリップに記録された効果イベント(バーンドーム・爆発)のうち、現在時刻までに発生したものを発火させる
 function fireDigestEffects(clip, localT){
   const effects = clip.effects, baseT = clip.frames[0].t;
   while (digestClipEffectCursor < effects.length && (effects[digestClipEffectCursor].t - baseT) <= localT){
@@ -7357,7 +7357,7 @@ function collectVsBlock(who){
   if (vsRemainingBlocks === 1) showVsAnnounceToast('📦 残り1個!'); // 取得した側に関わらず、残数がちょうど1個になった瞬間に知らせる
   checkVsMatchEnd();
 }
-// ジョジョ立ちで相手にヒットしたとき、所持している物資を1つ奪う(ダメージが無効化された場合でも成立する)
+// バーン立ちで相手にヒットしたとき、所持している物資を1つ奪う(ダメージが無効化された場合でも成立する)
 function transferVsResource(loserIsPlayer){
   if (loserIsPlayer){
     if (playerResourceCount > 0){
@@ -7373,7 +7373,7 @@ function transferVsResource(loserIsPlayer){
   updateVsHud();
 }
 
-// プレイヤーのジョジョ立ちがCPUに命中したときの処理(pressJojo()から呼ばれる)
+// プレイヤーのバーン立ちがCPUに命中したときの処理(pressJojo()から呼ばれる)
 function hitCpuWithJojo(){
   if (cpu.damageInvincibleTimer >= 0) return; // 直後の連続ヒットを防ぐ(プレイヤー側と同じ2秒無敵)
   spawnExplosion(cpu.x, cpu.airY+LEG_LEN+TORSO_H*0.5, cpu.z); // ジャンプでブロックを取りに行っている最中に被弾した場合も、その高さで爆発させる
@@ -7398,7 +7398,7 @@ function hitCpuWithJojo(){
   transferVsResource(false);
   checkVsMatchEnd();
 }
-// CPUのジョジョ立ちがプレイヤーに命中したときの処理
+// CPUのバーン立ちがプレイヤーに命中したときの処理
 function hitPlayerWithCpuJojo(){
   if (damageInvincibleTimer >= 0) return;
   spawnExplosion(pos.x, airY+cur.hipY+TORSO_H*0.5, pos.z);
@@ -7417,7 +7417,7 @@ function hitPlayerWithCpuJojo(){
 }
 
 const CPU_JOJO_POSE_TIME = 0.6; // CPUの決めポーズ保持時間(簡易表現。関節の補間はせず、この間だけ移動を止めるだけにとどめる)
-// CPUのジョジョ立ち発動。プレイヤーと同じ「前方5m中心」の判定式を、CPU自身の座標・向きを基準に計算する
+// CPUのバーン立ち発動。プレイヤーと同じ「前方5m中心」の判定式を、CPU自身の座標・向きを基準に計算する
 // (指示通り、CPUは判定のためにあえてプレイヤーの方へ向き直ったりはしない)
 function triggerCpuJojo(){
   cpu.jojoActive = true;
@@ -7433,14 +7433,14 @@ function triggerCpuJojo(){
   if (pd <= range) hitPlayerWithCpuJojo();
 }
 
-// CPU版のザ・世界発動(プレイヤーのactivateTheWorld()の簡易版)。演出(反転・バナー・BGM)はプレイヤー側と共有する
+// CPU版のストップ発動(プレイヤーのactivateTheWorld()の簡易版)。演出(反転・バナー・BGM)はプレイヤー側と共有する
 function activateCpuWorld(){
   cpu.worldCharged = false;
   cpu.worldActive = true;
   cpu.worldTimer = 0;
   playTimeStopSound();
   invertWorldColors(true);
-  theWorldBannerEl.textContent = 'ザ・世界 発動中!(敵)';
+  theWorldBannerEl.textContent = 'ストップ 発動中!(敵)';
   theWorldBannerEl.style.display = 'block';
   stopBGM();
 }
@@ -7468,18 +7468,18 @@ function findNearest(list, fromX, fromZ, filterFn){
 function findNearestAliveBlock(fromX, fromZ){
   return findNearest(qblocks, fromX, fromZ, b => b.alive);
 }
-// 現在飛行中のハロのうち、最も近いものを探す(CPUがザ・世界未使用可能な間、積極的に追いかけるために使う)
+// 現在飛行中のハロのうち、最も近いものを探す(CPUがストップ未使用可能な間、積極的に追いかけるために使う)
 function findNearestFlyingHaro(fromX, fromZ){
   return findNearest(haros, fromX, fromZ, s => s.phase === 'flying');
 }
 
-// CPUの毎フレーム処理。移動(物資へ直進)・ジョジョ立ち判定・ザ・世界の発動と経過・盤外復帰をまとめて行う
+// CPUの毎フレーム処理。移動(物資へ直進)・バーン立ち判定・ストップの発動と経過・盤外復帰をまとめて行う
 // 易しいモード中は、CPUのフォーム2速度倍率を通常(FORM2_SPEED_MULT=3)より弱めた値にする
 function cpuForm2SpeedMult(){ return vsEasyMode ? VS_EASY_FORM2_SPEED_MULT : FORM2_SPEED_MULT; }
 function updateCpu(dt){
   if (!vsMode || vsMatchOver) return;
 
-  // プレイヤーがザ・世界を発動中、自分は未発動なら完全に凍結する(update(dt)側のプレイヤー凍結と対になる仕様。
+  // プレイヤーがストップを発動中、自分は未発動なら完全に凍結する(update(dt)側のプレイヤー凍結と対になる仕様。
   // 「重なっている間は双方動ける」ので、cpu.worldActiveがtrueの間はこの凍結は働かない)
   if (theWorldActive && !cpu.worldActive) return;
 
@@ -7498,7 +7498,7 @@ function updateCpu(dt){
   }
   if (cpu.worldActive){
     cpu.worldTimer += dt;
-    // VS Modeのザ・世界はフォームによらず双方5秒固定(THE_WORLD_FREEZE_TIME)にする(指示通り)
+    // VS Modeのストップはフォームによらず双方5秒固定(THE_WORLD_FREEZE_TIME)にする(指示通り)
     if (cpu.worldTimer >= THE_WORLD_FREEZE_TIME){
       cpu.worldActive = false;
       if (!theWorldActive){ invertWorldColors(false); theWorldBannerEl.style.display = 'none'; startBGM(); } // プレイヤー側も未発動なら演出を戻す
@@ -7506,12 +7506,12 @@ function updateCpu(dt){
   }
   if (cpu.worldCharged && cpu.worldEngageTimer >= 0){
     cpu.worldEngageTimer -= dt;
-    // 易しいモード中は、プレイヤー自身がザ・世界をVS_EASY_ACTION_UNLOCK_COUNT回使うまでCPUは発動を控える(発動タイミングはそのまま待機させる)
+    // 易しいモード中は、プレイヤー自身がストップをVS_EASY_ACTION_UNLOCK_COUNT回使うまでCPUは発動を控える(発動タイミングはそのまま待機させる)
     if (cpu.worldEngageTimer <= 0 && (!vsEasyMode || playerVsWorldCount >= VS_EASY_ACTION_UNLOCK_COUNT)) activateCpuWorld();
   }
 
   // 簡易な垂直ジャンプ物理(プレイヤーのupdateAirPhysicsと同じ重力定数JUMP_GRAVITYを流用する)。
-  // ジョジョ立ち中(cpu.jojoActive)でも重力は止めない(空中でポーズを取り始めたら、そのまま落下しつつポーズする)
+  // バーン立ち中(cpu.jojoActive)でも重力は止めない(空中でポーズを取り始めたら、そのまま落下しつつポーズする)
   if (cpu.airY > 0 || cpu.vy !== 0){
     cpu.vy -= JUMP_GRAVITY*dt;
     cpu.airY += cpu.vy*dt;
@@ -7524,7 +7524,7 @@ function updateCpu(dt){
     if (cpu.jojoTimer >= CPU_JOJO_POSE_TIME) cpu.jojoActive = false;
     cpu.chargeSpeed = 0;
   } else {
-    // ハロが飛んでいて、まだザ・世界が使用可能でなければ、物資より優先して積極的に追いかける(指示通り)。
+    // ハロが飛んでいて、まだストップが使用可能でなければ、物資より優先して積極的に追いかける(指示通り)。
     // ハロの命中判定(updateHaroSlot側)は水平距離のみなので、ジャンプはせずそのまま近づくだけでよい
     const chasedHaro = cpu.worldCharged ? null : findNearestFlyingHaro(cpu.x, cpu.z);
     if (chasedHaro){
@@ -7588,7 +7588,7 @@ function updateCpu(dt){
       }
     }
 
-    // ジョジョ立ちの判定: プレイヤーが射程内に入ったら0.5〜1秒後に発動する(指示通り、狙って振り向いたりはしない)
+    // バーン立ちの判定: プレイヤーが射程内に入ったら0.5〜1秒後に発動する(指示通り、狙って振り向いたりはしない)
     const fx = -Math.sin(cpu.yaw), fz = -Math.cos(cpu.yaw);
     const ecx = cpu.x + fx*JOJO_FORWARD_OFFSET, ecz = cpu.z + fz*JOJO_FORWARD_OFFSET;
     const range = cpu.form === 2 ? JOJO_DESTROY_RANGE_FORM2 : JOJO_DESTROY_RANGE;
@@ -7596,7 +7596,7 @@ function updateCpu(dt){
     if (distToPlayer <= range){
       if (cpu.jojoEngageTimer < 0) cpu.jojoEngageTimer = VS_CPU_JOJO_ENGAGE_MIN + Math.random()*(VS_CPU_JOJO_ENGAGE_MAX-VS_CPU_JOJO_ENGAGE_MIN);
       cpu.jojoEngageTimer -= dt;
-      // 易しいモード中は、プレイヤー自身がジョジョ立ちをVS_EASY_ACTION_UNLOCK_COUNT回使うまでCPUは発動を控える
+      // 易しいモード中は、プレイヤー自身がバーン立ちをVS_EASY_ACTION_UNLOCK_COUNT回使うまでCPUは発動を控える
       if (cpu.jojoEngageTimer <= 0 && (!vsEasyMode || playerVsJojoCount >= VS_EASY_ACTION_UNLOCK_COUNT)) triggerCpuJojo();
     } else {
       cpu.jojoEngageTimer = -1; // 範囲外に出たら不発でリセットする
@@ -7693,7 +7693,7 @@ function loop(now){
       updateJumpThruster(dt); // applyPose()後の最新姿勢で足・バックパックの位置を取得するため、update(dt)の直後に呼ぶ
       updateHoverThrust(dt); // 第三部限定の地上ホバー噴射も同じ理由でここで呼ぶ
     }
-    if (state !== 'victory' && !theWorldActive) elapsedTime += dt; // ラスボス撃破の瞬間・ザ・世界発動中はタイマーを止める(カウントダウン終了で再開)
+    if (state !== 'victory' && !theWorldActive) elapsedTime += dt; // ラスボス撃破の瞬間・ストップ発動中はタイマーを止める(カウントダウン終了で再開)
     if (!vsMode){ // VS Modeはトロフィー・ハイライトダイジェストのどちらとも非連動の独立モードのため
       if (elapsedTime >= 100) awardTrophy('time_100');
       if (elapsedTime >= 200) awardTrophy('time_200');
