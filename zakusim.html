@@ -569,7 +569,7 @@
   <b>操作方法</b><br>
   ↑ / ↓ : 前進 / 後退<br>
   ← / → : その場で左右旋回<br>
-  Space : ジャンプ &nbsp; J : バーン立ち &nbsp; W : ストップ<br>
+  Space : ジャンプ &nbsp; B : バーン立ち &nbsp; S : ストップ<br>
   ドラッグ : 視点回転 &nbsp; ホイール : ズーム(10〜150m)<br>
   <b>全高17m・重量10t</b>
   <div id="gpHint">
@@ -1549,6 +1549,9 @@ const GROUND_HALF = GROUND_SIZE/2; // これより外に出ると落下する(�
 const GROUND_THICKNESS = 10;
 const FALL_GAMEOVER_TIME = 4.0; // 落下を始めてからGAME OVERになるまでの時間(秒)
 const VICTORY_DURATION = 8.0; // ラスボスブロックを撃破してからGAME OVER画面に切り替わるまでの演出時間(秒)
+// クリア演出(CONGRATURATION)を飛ばせるようになるまでの時間(秒)。撃破の瞬間に押していたキーで
+// 演出が一瞬で消えてしまわないよう、少しだけ待ってから受け付ける。画面上の案内表示はあえて出さない
+const VICTORY_SKIP_DELAY = 1.0;
 const FALL_PENETRATION = 3.0; // 体の中心がこの距離だけ落下判定エリアに侵入して初めて落下と判定する(身体が完全に侵入した状態で落とすため)
 // 原点から325mの位置に、一辺600mの正方形リング状の幅50mスリット(裂け目)を設ける。ジャンプせずに通過すると落下する
 // (旧仕様は幅10mだったが、床タイルとの整合を優先して50mに拡幅した。多段ジャンプは既に必須技術のため、幅が広がっても
@@ -4940,6 +4943,13 @@ function updateJojoChargeGlow(){
   jojoChargeGlowMat.opacity = blinkOn ? 0.22 : 0;
 }
 
+// バーン立ち・ストップに割り当てるキー。基本はB(バーン立ち)とS(ストップ)で、画面の操作説明にもこの2つだけを載せる。
+// 押しやすい位置のキーなら何でも反応するよう、周囲のキーも同じ動作として受け付ける(遊び方ガイドには注釈として控えめに記載)
+const JOJO_KEYS = ['b','v','g','f','j'];
+const TETSU_KEYS = ['s','c','x','d'];
+function isJojoKey(k){ return typeof k === 'string' && k.length === 1 && JOJO_KEYS.indexOf(k.toLowerCase()) !== -1; }
+function isTetsuKey(k){ return typeof k === 'string' && k.length === 1 && TETSU_KEYS.indexOf(k.toLowerCase()) !== -1; }
+
 window.addEventListener('keydown', (e)=>{
   ensureAudio(); // 初回のキー入力時にAudioContextを起動/再開
 
@@ -4975,6 +4985,12 @@ window.addEventListener('keydown', (e)=>{
     return;
   }
 
+  // クリア演出(CONGRATURATION)中は、1秒経過後に何かキーを押すと演出を飛ばしてGAME OVER画面(ハイライト再生)へ進む
+  if (canSkipVictoryPresentation()){
+    if (!e.repeat) skipVictoryPresentation();
+    return;
+  }
+
   if (e.key === 'Escape'){
     if (!e.repeat) togglePause();
     return;
@@ -4992,10 +5008,10 @@ window.addEventListener('keydown', (e)=>{
     pressMoveKey(key);
   } else if (key===' '){
     pressJump();
-  } else if (key==='j' || key==='J'){
+  } else if (isJojoKey(key)){
     armJojoHoldTimer();
     pressJojo();
-  } else if (key==='w' || key==='W'){
+  } else if (isTetsuKey(key)){
     pressTetsuzanko();
   }
 });
@@ -5007,7 +5023,7 @@ window.addEventListener('keyup', (e)=>{
     diffPressActive = false;
     startGame(e.key === '1' ? 1 : e.key === '2' ? 2 : 3, held >= 3000); // 3秒以上押しっぱなしで離した場合は無敵モードで開始する
   }
-  if (e.key === 'j' || e.key === 'J') cancelJojoHoldTimer();
+  if (isJojoKey(e.key)) cancelJojoHoldTimer();
 });
 
 // ============================================================
@@ -5209,10 +5225,11 @@ goNameInputEl.addEventListener('keydown', (e)=>{
 document.getElementById('goNameSubmit').addEventListener('click', (e)=>{ e.stopPropagation(); confirmRankingName(); });
 document.getElementById('goNameSubmit').addEventListener('touchstart', (e)=>{ e.preventDefault(); e.stopPropagation(); confirmRankingName(); }, { passive:false });
 
-// 「戻る」ボタンはニックネーム入力待ち中でも押せるようにする(未入力のまま=無名扱いで、そのままタイトルへ戻る)。
+// 「戻る」ボタンはニックネーム入力待ち中でも押せるようにする。この場合は「登録せずにやめる」という意思表示として扱い、
+// 入力欄に名前が入っていてもローカル・世界ランキングとも登録せずにタイトルへ戻る(登録は「登録」ボタン/Enterでのみ行う)。
 // 入力待ちでない通常時は、他の復帰操作と同じくGAMEOVER_WAIT_TIME(誤操作によるすぐの再スタート防止の待ち時間)を守る
 function backToTitleFromGameOver(){
-  if (awaitingNameEntry) confirmRankingName(); // 入力欄が空ならローカル・世界ランキングとも登録せず、そのままタイトルへ戻る
+  if (awaitingNameEntry) resetGame(); // 記録は一切行わない
   else if (gameOverTimer >= GAMEOVER_WAIT_TIME) resetGame();
 }
 document.getElementById('goBackBtn').addEventListener('click', (e)=>{ e.stopPropagation(); ensureAudio(); backToTitleFromGameOver(); });
@@ -5300,6 +5317,8 @@ fpsLimitCheckEl.addEventListener('change', ()=>{ fpsLimitEnabled = fpsLimitCheck
 
 renderer.domElement.addEventListener('mousedown', (e)=>{
   if (demoActive){ cancelDemo(); return; }
+  // クリア演出中はキーボードのAny Keyと同じ扱いで、画面クリックでも演出を飛ばす
+  if (canSkipVictoryPresentation()){ ensureAudio(); skipVictoryPresentation(); return; }
   dragging = true; lastPX = e.clientX; lastPY = e.clientY;
 });
 window.addEventListener('mousemove', (e)=>{
@@ -5324,6 +5343,8 @@ function pinchDist(t0, t1){ return Math.hypot(t0.clientX-t1.clientX, t0.clientY-
 
 renderer.domElement.addEventListener('touchstart', (e)=>{
   if (demoActive){ cancelDemo(); return; }
+  // クリア演出中は画面タップで演出を飛ばす(スマホにはキーが無いため。案内表示は出さない)
+  if (canSkipVictoryPresentation()){ ensureAudio(); skipVictoryPresentation(); return; }
   if (e.touches.length >= 2){
     camTouchId = null; // 2本指になったら回転は中断してピンチへ切り替え
     const t0 = e.touches[0], t1 = e.touches[1];
@@ -5529,6 +5550,12 @@ function updateGamepadInner(dt){
 
   if (gameOver){
     if (!awaitingNameEntry && gameOverTimer >= GAMEOVER_WAIT_TIME && anyPressed) resetGame();
+    return;
+  }
+
+  // クリア演出中は、何かボタンを押すと演出を飛ばす(キーボードのAny Keyと同じ扱い)
+  if (canSkipVictoryPresentation()){
+    if (anyPressed) skipVictoryPresentation();
     return;
   }
 
@@ -6038,10 +6065,7 @@ function update(dt){
     currentSpeed = 0; currentYawRate = 0;
 
     victoryTimer += dt;
-    if (victoryTimer >= VICTORY_DURATION){
-      congratsBannerEl.style.display = 'none';
-      finishGame(true); // 記録できたハイライトがあれば、この中でGAME OVER画面の背景ループ再生を開始する
-    }
+    if (victoryTimer >= VICTORY_DURATION) skipVictoryPresentation();
   }
 
   applyPose();
@@ -6112,7 +6136,8 @@ function finishGame(isVictory){
   gameoverEl.style.display = 'flex';
   if (isVictory) startDigestPlayback(); // 記録できたハイライトがあれば、GAME OVER画面の背景でループ再生する(無ければ何もしない)
 }
-// ランキング入りタイムのニックネーム登録を確定する(入力欄の「登録」ボタン、Enterキー、または「戻る」ボタンから呼ばれる)。
+// ランキング入りタイムのニックネーム登録を確定する(入力欄の「登録」ボタン、またはEnterキーから呼ばれる。
+// 「戻る」ボタンは登録せずに抜けるため、こちらは通らない)。
 // 確定後は表示を更新して待つのではなく、そのまま自動的にタイトルへ戻る
 function confirmRankingName(){
   if (!awaitingNameEntry) return;
@@ -6123,6 +6148,18 @@ function confirmRankingName(){
     submitWorldRanking(pendingRankingDiff, pendingRankingTime, name);
   } // 名前を空欄のまま確定した場合は、ローカル・世界ランキングとも登録しない(無名扱い)
   resetGame();
+}
+
+// クリア演出を終了してGAME OVER画面(ハイライトのループ再生付き)へ進む。
+// VICTORY_DURATIONの経過による自然終了と、VICTORY_SKIP_DELAY経過後のキー操作によるスキップの両方から呼ぶ
+function skipVictoryPresentation(){
+  if (state !== 'victory' || gameOver) return;
+  congratsBannerEl.style.display = 'none';
+  finishGame(true); // 記録できたハイライトがあれば、この中でGAME OVER画面の背景ループ再生を開始する
+}
+// クリア演出中で、かつスキップを受け付けられる状態かどうか
+function canSkipVictoryPresentation(){
+  return state === 'victory' && !gameOver && victoryTimer >= VICTORY_SKIP_DELAY;
 }
 
 function triggerGameOver(x,y,z){
