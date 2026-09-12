@@ -993,7 +993,8 @@ function hexToCss(hex){ return '#' + hex.toString(16).padStart(6,'0'); }
 // ---- 空(グラデーション or 宇宙背景)と雲 ----
 // 'gradient'=元の水色グラデーション+雲、'space'=地球と星空の背景画像(雲は非表示になる)。
 // プレイ(難易度選択→ゲーム開始)のたびに交互に切り替わる。初回はランダムに決まる
-let skyMode = Math.random() < 0.5 ? 'space' : 'gradient';
+let skyMode = Math.random() < 0.5 ? 'space' : 'gradient'; // 'gradient'(青空) | 'space'(地球と星空) | 'stage3'(第三部専用の艦隊戦)
+let skyAltMode = skyMode; // 第一部・第二部・VS Modeで交互に切り替える方(第三部の間も裏で進める)
 
 function createSkyGradientTexture(topHex, bottomHex){
   const w = 2, h = 256;
@@ -1502,6 +1503,26 @@ const SKY_TOP=0x4a90d9, SKY_BOTTOM=0xdcefff;
 // 両方のテクスチャをあらかじめ用意しておき、プレイのたびに貼り替えるだけで切り替えられるようにする
 const skyGradientTexture = createSkyGradientTexture(SKY_TOP, SKY_BOTTOM);
 const skySpaceTexture = createSpaceSkyTexture();
+// 第三部専用の背景(宇宙艦隊戦の写真)。他の2種と違って外部の画像ファイルのため、
+// 起動時には読み込まず、第三部を実際に遊ぶ(または解禁済みで遊ぶ見込みがある)ときだけ取りに行く。
+// 第三部は第二部をクリアするまで選べないため、初めて遊ぶ人に余計な通信をさせないための遅延読み込み
+let skyStage3Texture = null;
+let skyStage3Loading = false;
+function ensureStage3SkyTexture(){
+  if (skyStage3Texture || skyStage3Loading) return;
+  skyStage3Loading = true;
+  new THREE.TextureLoader().load('img/stage3.jpg', (tex) => {
+    tex.minFilter = THREE.LinearFilter; // 天球は常に拡大表示のため、ミップマップを作らずメモリと生成時間を節約する
+    tex.generateMipmaps = false;
+    // 天球は画像の縦方向を「真下から真上まで(180°)」に引き伸ばして貼るため、そのまま貼ると
+    // 画像の上半分(地球・大型艦・爆発といった見どころ)が頭上高くに来てしまい、通常のカメラ角度では
+    // ほとんど視界に入らない。そこで上半分だけを天球全体に使い、地球が地平線のすぐ上に来るようにする
+    tex.repeat.y = 0.5;
+    tex.offset.y = 0.5;
+    skyStage3Texture = tex;
+    applySkyMode(); // 読み込みが終わった時点で第三部を遊んでいれば、その場で貼り替わる
+  }, undefined, () => { skyStage3Loading = false; }); // 失敗した場合は次回の第三部開始時にもう一度試す
+}
 const sky = new THREE.Mesh(
   new THREE.SphereGeometry(2600, 24, 16),
   new THREE.MeshBasicMaterial({ map:skyGradientTexture, side:THREE.BackSide, fog:false, depthWrite:false })
@@ -1535,9 +1556,12 @@ for (let i=0;i<CLOUD_COUNT;i++){
 }
 // 現在のskyModeに合わせて、空のテクスチャと雲の表示/非表示を反映する(宇宙背景の場合、空に雲が浮くのは不自然なため雲は非表示にする)
 function applySkyMode(){
-  sky.material.map = (skyMode === 'space') ? skySpaceTexture : skyGradientTexture;
+  // 第三部は専用の背景で固定する。まだ読み込めていない間は、同じ宇宙背景である'space'のテクスチャで代用する
+  sky.material.map = (skyMode === 'stage3') ? (skyStage3Texture || skySpaceTexture)
+                   : (skyMode === 'space')  ? skySpaceTexture
+                   : skyGradientTexture;
   sky.material.needsUpdate = true;
-  clouds.forEach(c => { c.visible = (skyMode !== 'space'); });
+  clouds.forEach(c => { c.visible = (skyMode !== 'space' && skyMode !== 'stage3'); });
 }
 applySkyMode();
 
@@ -2346,7 +2370,13 @@ function spawnBoss(){
   bossSpeedMult = 1.0;
   bossFlashTimer = -1;
   bossMesh.scale.set(1,1,1);
+  // 見た目の位置・向きは、表示する前にここで確定させておく。updateBoss()はストップ発動中は
+  // 位置を更新しない(他の敵と同様に静止させる)ため、ここで設定しておかないと、ストップ中に
+  // 出現した場合にメッシュが前回の位置(初回は原点)のまま=地面に埋まった状態で見えてしまう
+  bossMesh.position.set(bossX, currentBossY(), bossZ);
+  bossMesh.rotation.y = Math.atan2(bossX-pos.x, bossZ-pos.z); // 目が常にプレイヤーを向く
   bossMesh.visible = true;
+  bossShadowMesh.position.set(bossX, 0.03, bossZ); // 影も同様に、1フレーム目から正しい位置に出す
   bossShadowMesh.visible = true;
   showBossAppearBanner();
 }
@@ -3829,11 +3859,15 @@ function savePart3Unlocked(){
   try{ localStorage.setItem(PART3_UNLOCK_KEY, '1'); }catch(e){}
 }
 let part3Unlocked = loadPart3Unlocked();
+// すでに解禁済みなら、第三部専用の背景を起動時にそっと先読みしておく(選んだ瞬間から正しい背景で始められるように)。
+// 未解禁の人には読み込ませないため、初めて遊ぶ人の通信量は増えない
+if (part3Unlocked) ensureStage3SkyTexture();
 function unlockPart3(){
   if (part3Unlocked) return;
   part3Unlocked = true;
   savePart3Unlocked();
   updateDifficultyUI();
+  ensureStage3SkyTexture(); // 解禁した瞬間から読み込みを始めておく
 }
 
 // ---- VS Mode(対CPU)の解禁状態。第一部クリアで解禁し、第三部と同じ考え方でブラウザに永続保存する ----
@@ -4599,7 +4633,16 @@ function updateHiddenAura(dt){
 function startGame(diff, invincible, vs){
   lastPlayedDiffButtonId = vs ? 'diffBtnVs' : ('diffBtn'+diff); // 起動画面に戻った際のフォーカス先として記録しておく
   vsMode = !!vs; // VS Modeはdiff=1(第一部)のステージ設定を土台にしつつ、随所でvsModeを見て挙動を分岐する
-  skyMode = (skyMode === 'space') ? 'gradient' : 'space'; // プレイのたびに背景を交互に切り替える
+  // 第三部は専用の背景で固定する。それ以外はプレイのたびに空と宇宙を交互に切り替える。
+  // 交互の値を進めるのは第三部以外を遊んだときだけ(第三部でも進めてしまうと、
+  // 第三部を挟んだ前後で同じ背景が続いてしまい交互にならないため)
+  if (!vsMode && diff === 3){
+    skyMode = 'stage3';
+    ensureStage3SkyTexture();
+  } else {
+    skyAltMode = (skyAltMode === 'space') ? 'gradient' : 'space';
+    skyMode = skyAltMode;
+  }
   applySkyMode();
   invincibleMode = !!invincible;
   difficulty = diff;
