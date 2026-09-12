@@ -1931,19 +1931,21 @@ const duckbillMesh = new THREE.Mesh(new THREE.BoxGeometry(1.15,0.525,2.275), bod
 duckbillMesh.position.set(0,-0.55,-1.3);
 headGroup.add(duckbillMesh);
 
-const slitMesh = new THREE.Mesh(new THREE.BoxGeometry(1.5,0.4,0.05), slitMat);
-slitMesh.position.set(0,0.15,-1.35);
+// 奥行き0.4・-1.5の位置で、後述のeyeMesh(z:-1.65〜-1.45)を完全に覆う厚みにしてある
+// (以前は奥行き0.05しかなく、目が前面からはみ出して見えていた)
+const slitMesh = new THREE.Mesh(new THREE.BoxGeometry(1.5,0.4,0.4), slitMat);
+slitMesh.position.set(0,0.15,-1.5);
 headGroup.add(slitMesh);
 
 // 第三部専用: 縦のスリットを重ねて十字スリットにする(通常は非表示。applyPart3Appearanceで切り替える)
-const slitMeshVertical = new THREE.Mesh(new THREE.BoxGeometry(0.4,1.5,0.05), slitMat);
-slitMeshVertical.position.set(0,0.15,-1.35);
+const slitMeshVertical = new THREE.Mesh(new THREE.BoxGeometry(0.4,1.5,0.4), slitMat);
+slitMeshVertical.position.set(0,0.15,-1.5);
 slitMeshVertical.visible = false;
 headGroup.add(slitMeshVertical);
 
 const eyeMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.25,0.25,0.2,24), eyeMat);
 eyeMesh.rotation.x = Math.PI/2;
-eyeMesh.position.set(0,0.15,-1.55);
+eyeMesh.position.set(0,0.15,-1.15); // スリット穴の手前に出して見えるように
 headGroup.add(eyeMesh);
 
 // フォーム2専用: 頭頂中央のブレードアンテナ(シャアザクの角を参考にした、とがった一枚の刃状フィン)
@@ -2032,12 +2034,12 @@ function createZakuMesh(isForm2){
   const duckbill = new THREE.Mesh(new THREE.BoxGeometry(1.15,0.525,2.275), bMat);
   duckbill.position.set(0,-0.55,-1.3);
   head.add(duckbill);
-  const slit = new THREE.Mesh(new THREE.BoxGeometry(1.5,0.4,0.05), zakuSlitMat);
-  slit.position.set(0,0.15,-1.35);
+  const slit = new THREE.Mesh(new THREE.BoxGeometry(1.5,0.4,0.4), zakuSlitMat);
+  slit.position.set(0,0.15,-1.5);
   head.add(slit);
   const eye = new THREE.Mesh(new THREE.CylinderGeometry(0.25,0.25,0.2,16), zakuEyeMat);
   eye.rotation.x = Math.PI/2;
-  eye.position.set(0,0.15,-1.55);
+  eye.position.set(0,0.15,-1.15); // スリット穴の手前に出して見えるように
   head.add(eye);
 
   const rLeg = buildLimb(HIP_X, 0, THIGH, SHIN, LEG_R, bMat);
