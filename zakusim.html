@@ -1865,11 +1865,48 @@ const torsoMesh = new THREE.Mesh(new THREE.BoxGeometry(TORSO_W,TORSO_H,TORSO_D),
 torsoMesh.position.y = TORSO_H/2;
 hipGroup.add(torsoMesh);
 
+// 機体番号「83」(左胸。bodyMatとは別素材の板ポリゴンなのでフォーム切替の色変更を受けず常に白文字のまま。
+// torsoMesh(プレイヤー専用メッシュ)の子なので敵ザク(createZakuMesh側で独立に構築)には付かない)
+function createUnitNumberTexture(text, fontSize=120){
+  const canvas = document.createElement('canvas');
+  canvas.width = 256; canvas.height = 160;
+  const ctx = canvas.getContext('2d');
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+  ctx.lineWidth = Math.ceil(fontSize * 0.08);
+  ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+  ctx.strokeText(text, canvas.width/2, canvas.height/2 + 6);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(text, canvas.width/2, canvas.height/2 + 6);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.generateMipmaps = false;
+  tex.minFilter = THREE.LinearFilter;
+  return tex;
+}
+const unitNumberMat = new THREE.MeshBasicMaterial({
+  map:createUnitNumberTexture('83'), transparent:true, depthWrite:false,
+  polygonOffset:true, polygonOffsetFactor:-4, polygonOffsetUnits:-4
+});
+const unitNumberMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.0), unitNumberMat);
+unitNumberMesh.rotation.y = Math.PI; // 正面(-z側)を向かせる
+unitNumberMesh.position.set(-1.1, 2.0, -1.12); // 左胸・上部、胴体前面(-1.1)よりわずかに前へ
+torsoMesh.add(unitNumberMesh);
+
 // バックパック
 const backpackMesh = new THREE.Mesh(
   new THREE.BoxGeometry(TORSO_W*0.6, TORSO_H*0.6, 1.5), backpackMat);
 backpackMesh.position.set(0, TORSO_H/2, TORSO_D/2 + 1.5/2);
 hipGroup.add(backpackMesh);
+
+// フォーム2専用: バックパック背面に「x3」マーク(背中からみて上部右)
+const backpackForm2Mat = new THREE.MeshBasicMaterial({
+  map:createUnitNumberTexture('x3', 120), transparent:true, depthWrite:false,
+  polygonOffset:true, polygonOffsetFactor:-2, polygonOffsetUnits:-2
+});
+const backpackForm2Mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.96), backpackForm2Mat);
+backpackForm2Mesh.position.set(0.6, 1.5, 0.76); // バックパック背面・上部右
+backpackForm2Mesh.visible = false;
+backpackMesh.add(backpackForm2Mesh);
 
 // ジャンプ上昇中のバーナー噴射エフェクト用マーカー(バックパック下面の左右2点)
 const backpackJetL = new THREE.Object3D();
@@ -6548,6 +6585,7 @@ function updatePlayerAppearance(){
     bodyMat.emissive.setHex(0x000000);
   }
   form2Fin.visible = (playerForm === 2);
+  backpackForm2Mesh.visible = (playerForm === 2);
   theWorldHorns.forEach(h => { h.visible = theWorldCharged; });
 }
 // 第三部限定の見た目切り替え(顔の十字スリット・足の太さ3倍)。ゲーム開始時に一度だけ呼ぶ
