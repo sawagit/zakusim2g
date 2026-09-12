@@ -4102,10 +4102,10 @@ let rankingOverlayOpen = false; // ランキングオーバーレイ表示中は
 let settingsOverlayOpen = false; // 設定オーバーレイ表示中も同様にタイマー・ゲーム開始キーを止める
 const demoLabelEl = document.getElementById('demoLabel');
 // スマホ放置によるバッテリー消耗を防ぐための省電力スリープ。実際の操作がないまま「自動デモが流れ続けている」
-// 「GAME OVER画面でハイライトがループし続けている」「ポーズしたまま」といった状態が合計10分続いたら、
+// 「GAME OVER画面でハイライトがループし続けている」「ポーズしたまま」といった状態が合計5分続いたら、
 // 3Dの描画(renderer.render)そのものを止めて待機する。デモが何度も繰り返し起動・終了しても、
 // その間ずっと本当に無操作なら合計時間として積み上がり続ける(1回のデモ・1回のプレイの長さでは判定しない)
-const IDLE_SLEEP_LIMIT = 600.0; // 秒(10分)。この間ずっと無操作が続いたら省電力スリープに入る
+const IDLE_SLEEP_LIMIT = 300.0; // 秒(5分)。この間ずっと無操作が続いたら省電力スリープに入る
 let totalUnattendedTime = 0;
 let powerSaveSleeping = false; // 省電力スリープ中(描画・ゲーム進行とも停止。何か操作すると解除される)
 const demoSleepNoteEl = document.getElementById('demoSleepNote');
@@ -6773,9 +6773,9 @@ function updateQBlock(dt){
     b.mesh.visible = false;
     b.shadow.visible = false;
     triggerForm2();
-    if (b.special){
+    if (b.special && !invincibleMode){
       // スペシャルブロック限定:銀玉が周囲の敵ザク・ドクロをレーザーで自動撃破する(時間制限なし、被弾で1個ずつ減る)。
-      // 2個目(第三部の最後の物資)を取得した場合は銀玉が5個に増える
+      // 2個目(第三部の最後の物資)を取得した場合は銀玉が5個に増える。無敵モードは被弾自体が発生せず銀玉の意味がないため対象外
       specialQBlocksCollected++;
       activateSpecialBuff(specialQBlocksCollected >= 2 ? SPECIAL_BUFF_ORB_COUNT_2ND : SPECIAL_BUFF_ORB_COUNT);
       if (!vsMode) awardTrophy('silver_orb');
@@ -6902,12 +6902,7 @@ function fireSpecialBuffLasers(){
   }
 }
 function updateSpecialBuff(dt){
-  if (invincibleMode){
-    // 無敵モード中は確認しやすいよう、取得の有無に関わらず常に銀玉3個を出しっぱなしにする(無敵モード中はダメージ自体が発生しないため自然に減らない)
-    if (!specialBuff.active) activateSpecialBuff();
-  } else if (!specialBuff.active){
-    return;
-  }
+  if (!specialBuff.active) return; // 無敵モードは銀玉自体を取得しない仕様のため、ここで特別扱いはしない
   specialBuff.orbitAngle += SPECIAL_BUFF_ORBIT_SPEED*dt;
   const cy = airY + SPECIAL_BUFF_ORBIT_HEIGHT;
   const orbCount = Math.max(1, specialBuff.orbCount); // 残っている銀玉の数で等間隔に配置する(被弾で減ると自然に並び直る)
@@ -7012,7 +7007,8 @@ function updateTheWorld(dt){
 
 function currentHaroCycle(){
   // ラスボスがフェーズ2(1回目のヒット後)以降の間は出現周期が短くなる。
-  // 第三部の第3形態(2回目のヒット後)でも、フェーズ2と同じ扱いのまま短い周期を維持する
+  // 第三部限定:フェーズ3(2回目のヒット後)はさらに出現周期を半分(頻度倍)にする
+  if (bossActive && bossPhase >= 3) return HARO_CYCLE_BOSS/2;
   return (bossActive && bossPhase >= 2) ? HARO_CYCLE_BOSS : HARO_CYCLE;
 }
 function currentHaroSpawnArc(){
