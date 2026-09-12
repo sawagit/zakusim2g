@@ -793,8 +793,14 @@ const COL_SLIT = 0x2a2f2c;
 const COL_EYE = 0xff4fa3;
 
 // 移動
-const WALK_SPEED=6, RUN_SPEED=14, MOVE_ACCEL=20;
-const PLAYER_FORM1_SPEED_MULT=1.5; // 自機のみ、フォーム1(通常時)の移動速度を1.5倍にする。フォーム2・第三部の基準速度(RUN_SPEED*2)・敵ザク/CPUの速度には適用しない
+const WALK_SPEED=6, RUN_SPEED=14, MOVE_ACCEL=20; // MOVE_ACCELはVS ModeのCPU専用。自機の加速度はMOVE_ACCEL_TIMEから毎回算出する(下記)
+const PLAYER_FORM1_SPEED_MULT=1.7; // 自機のみ、フォーム1(通常時)の移動速度を1.7倍にする。フォーム2・第三部の基準速度(RUN_SPEED*2)・敵ザク/CPUの速度には適用しない
+// 自機の加速度は固定値ではなく「停止から最高速に達するまでの秒数」で決める。固定20m/s²のままだと、
+// フォーム2や第三部のように最高速が高い形態ほど乗るまでが遅くなり(第三部のフォーム2で4.2秒、
+// 隠しオーラで7.0秒)、速い形態ほど鈍重に感じるという逆転が起きていたため。
+// この方式ならどの形態でも同じ秒数で最高速に届き、加速度そのものは形態に応じて自動的に上がる
+const MOVE_ACCEL_TIME=1.2;
+function playerMoveAccel(effRun){ return Math.abs(effRun)/MOVE_ACCEL_TIME; }
 const TURN_SPEED=74.5*D2R; // 多段ジャンプの空中旋回でのみ使用(地上の移動方向転換はYAW_SNAP_Tベースの旋回に置き換え済み)
 const YAW_SNAP_T=1.25; // 地上移動:方向キー入力で決まる目標方向へ、この秒数でおよそ99%向き直る(←→押しっぱなし時の回転が速すぎたため、当初の5倍に緩和)
 const CAM_FOLLOW_T=4.5; // 視界自動回転モード中、カメラが機体の新しい向きに追いつくまでの遅れ(秒)。YAW_SNAP_Tと同じ比率で5倍に緩和
@@ -803,6 +809,11 @@ const PART3_HOVER_TILT = -30*D2R; // 第三部のホバー前進中、踏ん張�
 
 // 歩行
 const CADENCE_COEF=0.75;
+// 歩調・上下バウンドの計算に使う速度の上限(m/s)。実際の移動速度がこれを超えても脚の回転と
+// バウンドはここで頭打ちにする。上限を設けないと、フォーム2(42m/s)で毎秒5サイクル、
+// 隠しオーラ(70m/s)では毎秒8サイクル超で脚が回り続け、バウンドも4mを超えて見た目が破綻するため。
+// 上限値はフォーム1の最高速(RUN_SPEED×PLAYER_FORM1_SPEED_MULT)に揃えてあり、フォーム1の見た目は従来どおり変わらない
+const WALK_ANIM_SPEED_CAP=RUN_SPEED*PLAYER_FORM1_SPEED_MULT;
 const HIP_SWING=31.5*D2R;
 const KNEE_BASE=3.4*D2R, KNEE_EXTRA=51.6*D2R-3.4*D2R;
 const ARM_SWING=28.6*D2R;
@@ -5625,7 +5636,8 @@ function updateLocomotion(dt, allowInput){
   }
 
   prevSpeed = currentSpeed;
-  currentSpeed = accelTo(currentSpeed, targetSpeed, MOVE_ACCEL, dt);
+  const effAccel = playerMoveAccel(effRun); // 形態ごとの最高速から算出するため、どの形態でもMOVE_ACCEL_TIME秒で最高速に届く
+  currentSpeed = accelTo(currentSpeed, targetSpeed, effAccel, dt);
   currentYawRate = dt>0 ? (yaw-prevYaw)/dt : 0; // 傾き演出・多段ジャンプへの引き継ぎ用に、実際に生じた旋回速度を算出しておく
 
   pos.x += currentSpeed * (-Math.sin(yaw)) * dt;
@@ -5636,7 +5648,7 @@ function updateLocomotion(dt, allowInput){
   // 第三部のホバー前進中は、加速度によるわずかな傾きの代わりに、踏ん張るような固定30°の前傾姿勢にする
   const targetTiltX = (difficulty === 3 && Math.abs(currentSpeed) > 0.01)
     ? PART3_HOVER_TILT
-    : clamp(accel/MOVE_ACCEL, -1, 1) * TILT_MAX_FB;
+    : clamp(accel/effAccel, -1, 1) * TILT_MAX_FB; // 傾きの正規化も同じ加速度を基準にする(固定値のままだと速い形態で常に最大まで傾いてしまう)
   const targetTiltZ = clamp(currentYawRate/effTurn, -1, 1) * TILT_MAX_LR;
   cur.tiltX += (targetTiltX - cur.tiltX) * TILT_LERP;
   cur.tiltZ += (targetTiltZ - cur.tiltZ) * TILT_LERP;
@@ -5683,7 +5695,8 @@ const PART3_HOVER_DROP = 1.4; // 第三部の脚を屈伸させる深さ(m)。�
 const PART3_HOVER_ELBOW = 80*D2R; // 第三部のホバー中、腕を下に垂らしたまま肘を前方へ曲げる角度
 function updateWalkPose(dt){
   const speedAbs = Math.abs(currentSpeed);
-  const cadence = CADENCE_COEF * speedAbs;
+  const animSpeed = Math.min(speedAbs, WALK_ANIM_SPEED_CAP); // 脚の回転・バウンドはここで頭打ちにする(実際の移動速度は変えない)
+  const cadence = CADENCE_COEF * animSpeed;
   walkPhase += cadence*dt;
 
   const rPhase = walkPhase, lPhase = walkPhase + Math.PI;
@@ -5721,7 +5734,7 @@ function updateWalkPose(dt){
   if (hoverPose){
     cur.hipY = LEG_LEN - PART3_HOVER_DROP; // 屈伸姿勢の高さを維持する(通常の上下バウンドはしない)
   } else {
-    const bobFrac = speedAbs>0 ? speedAbs/WALK_SPEED : 0;
+    const bobFrac = animSpeed>0 ? animSpeed/WALK_SPEED : 0;
     const bob = BOB_AMP * bobFrac * Math.abs(Math.sin(walkPhase));
     cur.hipY = LEG_LEN + bob;
   }
@@ -7545,7 +7558,7 @@ function updateCpu(dt){
     if (chasedHaro){
       const hdx = chasedHaro.x-cpu.x, hdz = chasedHaro.z-cpu.z;
       const hdist = Math.hypot(hdx, hdz);
-      // プレイヤーのupdateLocomotion()と同じMOVE_ACCELで加速・減速する(以前は瞬時に最高速へ達していたため急すぎた)
+      // MOVE_ACCELで加速・減速する(以前は瞬時に最高速へ達していたため急すぎた)。自機は形態ごとに加速度が変わる方式へ移行したが、CPUは従来どおり固定値のまま
       const targetSpeed = (hdist > 0.5) ? RUN_SPEED*(cpu.form === 2 ? cpuForm2SpeedMult() : 1) : 0;
       cpu.chargeSpeed = accelTo(cpu.chargeSpeed, targetSpeed, MOVE_ACCEL, dt);
       if (hdist > 0.5){
@@ -7563,7 +7576,7 @@ function updateCpu(dt){
       if (target){
         const dx = target.x-cpu.x, dz = target.z-cpu.z;
         const dist = Math.hypot(dx, dz);
-        // プレイヤーのupdateLocomotion()と同じMOVE_ACCELで加速・減速する(以前は瞬時に最高速へ達していたため急すぎた)
+        // MOVE_ACCELで加速・減速する(以前は瞬時に最高速へ達していたため急すぎた)。自機は形態ごとに加速度が変わる方式へ移行したが、CPUは従来どおり固定値のまま
         const targetSpeed = (dist > 0.5) ? RUN_SPEED*(cpu.form === 2 ? cpuForm2SpeedMult() : 1) : 0;
         cpu.chargeSpeed = accelTo(cpu.chargeSpeed, targetSpeed, MOVE_ACCEL, dt);
         if (dist > 0.5){
