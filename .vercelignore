@@ -2,9 +2,9 @@
 # zakusim.txtにはusage.htmlであえて伏せているラスボスの存在や、無敵モードの隠し操作・全トロフィーの条件が
 # 書かれているため、URLを直接叩けば読めてしまう状態を避ける目的で除外している。
 # いずれもzakusim.html / usage.html / review.htmlからは参照されていないため、除外してもサイトの動作には影響しない。
+# (遊び方スクショ/はusage.htmlから参照されるようになったため対象外。デプロイに含める)
 zakusim.txt
 zakusim - コピー.txt
 loadtest_report.html
 earth_starfield_v2.svg
 yassan.jpg
-遊び方スクショ/
