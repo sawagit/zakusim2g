@@ -2346,7 +2346,13 @@ function spawnBoss(){
   bossSpeedMult = 1.0;
   bossFlashTimer = -1;
   bossMesh.scale.set(1,1,1);
+  // 見た目の位置・向きは、表示する前にここで確定させておく。updateBoss()はストップ発動中は
+  // 位置を更新しない(他の敵と同様に静止させる)ため、ここで設定しておかないと、ストップ中に
+  // 出現した場合にメッシュが前回の位置(初回は原点)のまま=地面に埋まった状態で見えてしまう
+  bossMesh.position.set(bossX, currentBossY(), bossZ);
+  bossMesh.rotation.y = Math.atan2(bossX-pos.x, bossZ-pos.z); // 目が常にプレイヤーを向く
   bossMesh.visible = true;
+  bossShadowMesh.position.set(bossX, 0.03, bossZ); // 影も同様に、1フレーム目から正しい位置に出す
   bossShadowMesh.visible = true;
   showBossAppearBanner();
 }
