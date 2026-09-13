@@ -5369,19 +5369,16 @@ const uiElementsToHide = [
 ];
 hideUIBtnEl.addEventListener('mousedown', ()=>{
   uiElementsToHide.forEach(el=>{ if(el) el.style.visibility = 'hidden'; });
-  hideUIBtnEl.style.visibility = 'hidden';
+  // ボタン自体は常に見える状態に（mouseupイベントが発火するために必要）
 });
 hideUIBtnEl.addEventListener('touchstart', ()=>{
   uiElementsToHide.forEach(el=>{ if(el) el.style.visibility = 'hidden'; });
-  hideUIBtnEl.style.visibility = 'hidden';
 }, { passive:true });
 hideUIBtnEl.addEventListener('mouseup', ()=>{
   uiElementsToHide.forEach(el=>{ if(el) el.style.visibility = 'visible'; });
-  hideUIBtnEl.style.visibility = 'visible';
 });
 hideUIBtnEl.addEventListener('touchend', ()=>{
   uiElementsToHide.forEach(el=>{ if(el) el.style.visibility = 'visible'; });
-  hideUIBtnEl.style.visibility = 'visible';
 });
 
 // スマホの全画面モード(Fullscreen API)。iOS Safari等、非対応の端末ではボタンごと非表示にする
