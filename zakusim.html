@@ -104,15 +104,19 @@
     position:fixed; top:10px; left:50%; transform:translateX(-50%); z-index:16;
     display:flex; gap:8px; align-items:center;
   }
-  #resetBtn, #pauseBtn, #fullscreenBtn {
+  #resetBtn, #pauseBtn, #fullscreenBtn, #hideUIBtn {
     font-family: -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
     font-size:13px; font-weight:bold; color:#222;
     background:rgba(255,255,255,0.78); border:1px solid #ccc; border-radius:6px;
     padding:6px 14px; user-select:none; cursor:pointer; -webkit-tap-highlight-color:transparent;
   }
-  #resetBtn:hover, #pauseBtn:hover, #fullscreenBtn:hover { background:rgba(255,255,255,0.95); }
+  #resetBtn:hover, #pauseBtn:hover, #fullscreenBtn:hover, #hideUIBtn:hover { background:rgba(255,255,255,0.95); }
   #pauseBtn, #fullscreenBtn { padding:6px 12px; }
   #pauseBtn.active, #fullscreenBtn.active { background:rgba(255,204,51,0.85); }
+  #hideUIBtn {
+    position:fixed; bottom:calc(10px + env(safe-area-inset-bottom)); right:calc(14px + env(safe-area-inset-right));
+    z-index:15; padding:6px 12px;
+  }
   #gpIndicator {
     display:none; font-family: -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
     font-size:12px; font-weight:bold; color:#0a5c2e;
@@ -601,6 +605,7 @@
   <div id="fullscreenBtn">⛶ 全画面</div>
   <div id="gpIndicator">🎮 接続</div>
 </div>
+<button type="button" id="hideUIBtn" style="display:none;">UI非表示</button>
 <div id="pauseOverlay">⏸ PAUSE</div>
 <div id="demoLabel">DEMO PLAY - 何か操作すると戻ります</div>
 <div id="digestLabel">🎬 ハイライト再生中</div>
@@ -3796,7 +3801,7 @@ function closeSettingsOverlay(){
 const DEMO_RANKING_TOGGLE_INTERVAL = 8.0; // 秒。この間隔でローカル⇔世界を切り替える
 let demoRankingToggleTimer = 0;
 let demoRankingShowWorld = false;
-let demoWorldRankingCache = { 1: null, 2: null }; // null=未取得、配列=取得済み(空配列も含む)
+let demoWorldRankingCache = { 1: null, 2: null, 3: null }; // null=未取得、配列=取得済み(空配列も含む)
 // デモ開始のたびに取得し直すと、放置された端末が何度もデモを繰り返すたびに通信し、世界ランキングを預けている
 // Google Apps Script側の1日あたりの実行枠を無駄に消費してしまう。そのため一度取得したら一定時間は使い回す
 const DEMO_WORLD_RANKING_TTL = 300000; // ミリ秒(5分)
@@ -3806,6 +3811,7 @@ function refreshDemoWorldRankingIfStale(){
   demoWorldRankingFetchedAt = Date.now(); // 取得失敗時もここで更新し、繋がらない状態で何度も叩き続けないようにする
   fetchWorldRankingForDemo(1);
   fetchWorldRankingForDemo(2);
+  fetchWorldRankingForDemo(3); // 第三部もアンロック時に備えて取得
 }
 function fetchWorldRankingForDemo(diff){
   fetch(WORLD_RANKING_URL + '?part=' + encodeURIComponent(diffLabel(diff)))
@@ -3815,16 +3821,22 @@ function fetchWorldRankingForDemo(diff){
 }
 function renderDemoRankingPanel(){
   if (demoRankingShowWorld){
-    const w1 = demoWorldRankingCache[1], w2 = demoWorldRankingCache[2];
-    rankingCornerEl.innerHTML =
-      '<div class="rcTitle">🌍 世界ランキング</div>' +
+    const w1 = demoWorldRankingCache[1], w2 = demoWorldRankingCache[2], w3 = demoWorldRankingCache[3];
+    let html = '<div class="rcTitle">🌍 世界ランキング</div>' +
       '<div class="rcLv">第一部</div>' + (w1 ? buildWorldRankingRowsHTML(w1.slice(0,3)) : '<div class="rankingEmpty">読み込み中…</div>') +
       '<div class="rcLv">第二部</div>' + (w2 ? buildWorldRankingRowsHTML(w2.slice(0,3)) : '<div class="rankingEmpty">読み込み中…</div>');
+    if (part3Unlocked){
+      html += '<div class="rcLv">第三部</div>' + (w3 ? buildWorldRankingRowsHTML(w3.slice(0,3)) : '<div class="rankingEmpty">読み込み中…</div>');
+    }
+    rankingCornerEl.innerHTML = html;
   } else {
-    rankingCornerEl.innerHTML =
-      '<div class="rcTitle">🏆 ランキング(この端末)</div>' +
+    let html = '<div class="rcTitle">🏆 ランキング(この端末)</div>' +
       '<div class="rcLv">第一部</div>' + buildRankingColumnHTML(1, 3) +
       '<div class="rcLv">第二部</div>' + buildRankingColumnHTML(2, 3);
+    if (part3Unlocked){
+      html += '<div class="rcLv">第三部</div>' + buildRankingColumnHTML(3, 3);
+    }
+    rankingCornerEl.innerHTML = html;
   }
 }
 function showDemoRanking(){
@@ -5340,6 +5352,37 @@ function togglePause(){
 }
 pauseBtnEl.addEventListener('click', (e)=>{ e.stopPropagation(); ensureAudio(); togglePause(); });
 pauseBtnEl.addEventListener('touchstart', (e)=>{ e.preventDefault(); e.stopPropagation(); ensureAudio(); togglePause(); }, { passive:false });
+
+// ハイライト再生中のUI非表示ボタン
+const hideUIBtnEl = document.getElementById('hideUIBtn');
+const uiElementsToHide = [
+  document.getElementById('ui'),
+  document.getElementById('gameover'),
+  document.getElementById('rankingOverlay'),
+  document.getElementById('pauseBtn'),
+  document.getElementById('fullscreenBtn'),
+  document.getElementById('radarBox'),
+  document.getElementById('timer'),
+  document.getElementById('distance'),
+  document.getElementById('digestLabel'),
+  document.getElementById('trophyToast')
+];
+hideUIBtnEl.addEventListener('mousedown', ()=>{
+  uiElementsToHide.forEach(el=>{ if(el) el.style.visibility = 'hidden'; });
+  hideUIBtnEl.style.visibility = 'hidden';
+});
+hideUIBtnEl.addEventListener('touchstart', ()=>{
+  uiElementsToHide.forEach(el=>{ if(el) el.style.visibility = 'hidden'; });
+  hideUIBtnEl.style.visibility = 'hidden';
+}, { passive:true });
+hideUIBtnEl.addEventListener('mouseup', ()=>{
+  uiElementsToHide.forEach(el=>{ if(el) el.style.visibility = 'visible'; });
+  hideUIBtnEl.style.visibility = 'visible';
+});
+hideUIBtnEl.addEventListener('touchend', ()=>{
+  uiElementsToHide.forEach(el=>{ if(el) el.style.visibility = 'visible'; });
+  hideUIBtnEl.style.visibility = 'visible';
+});
 
 // スマホの全画面モード(Fullscreen API)。iOS Safari等、非対応の端末ではボタンごと非表示にする
 const fullscreenBtnEl = document.getElementById('fullscreenBtn');
@@ -7233,6 +7276,8 @@ function digestResetAll(){
   digestClipTimer = 0;
   digestZakuPool.forEach(m => m.group.visible = false);
   if (digestLabelEl) digestLabelEl.style.display = 'none';
+  hideUIBtnEl.style.display = 'none'; // UI非表示ボタンを非表示
+  uiElementsToHide.forEach(el=>{ if(el) el.style.visibility = 'visible'; }); // UI要素を表示状態に戻す
 }
 
 function digestCaptureFrame(){
@@ -7333,6 +7378,7 @@ function startDigestPlayback(){
   startDigestClip(digestClips[0]);
   digestPlaybackActive = true;
   if (digestLabelEl) digestLabelEl.style.display = 'block';
+  hideUIBtnEl.style.display = 'block'; // UI非表示ボタンを表示
   return true;
 }
 function digestClipDurationOf(clip){
