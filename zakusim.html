@@ -115,7 +115,9 @@
   #pauseBtn.active, #fullscreenBtn.active { background:rgba(255,204,51,0.85); }
   #hideUIBtn {
     position:fixed; bottom:calc(10px + env(safe-area-inset-bottom)); right:calc(14px + env(safe-area-inset-right));
-    z-index:15; padding:6px 12px;
+    /* GAME OVER画面(z-index:20)やランキング等の各種オーバーレイ(最大25)より手前に出して、
+       ハイライト再生中(GAME OVER画面表示中)でも確実にクリック/タップできるようにする */
+    z-index:30; padding:6px 12px;
   }
   #gpIndicator {
     display:none; font-family: -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
