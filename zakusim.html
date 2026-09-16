@@ -2808,6 +2808,10 @@ function triggerVictory(){
   // ジャンプ上昇中(vy>0)にラスボスを撃破した場合、victory中は物理更新が行われずvyが正のまま残り続け、
   // updateJumpThrusterがいつまでも「上昇中」と判定してスラスター音が鳴り続けてしまうため、ここで明示的に止める
   stopThrusterSound();
+  // トドメのヒット時点でストップが発動中だった場合は、フェーズ移行時(hitBossPhase1/2)と同様に即座に解除する。
+  // updateTheWorld(dt)はstateに関わらず毎フレーム呼ばれ続けるため、ここで止めないとストップの残り時間が
+  // 自然に切れるまで「ストップ発動中!」「残りn秒!」の表示がCONGRATURATION演出・ハイライト再生中も出続けてしまう
+  if (theWorldActive) deactivateTheWorld();
   awardTrophy(difficulty === 1 ? 'last_boss_p1' : difficulty === 2 ? 'last_boss_p2' : 'last_boss_p3');
   if (difficulty === 1) pendingPart2TeaseMessage = true; // 次にタイトル画面へ戻ったタイミングで一度だけメッセージを出す
   if (difficulty === 1) unlockVsMode(); // 第一部クリアでVS Modeを解禁する(triggerVictory()はVS Mode中は呼ばれないため、ここでのdifficulty===1は必ず通常プレイの第一部を指す)
